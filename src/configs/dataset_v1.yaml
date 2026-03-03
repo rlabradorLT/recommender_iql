@@ -10,7 +10,7 @@ emb_dim: 64
 hid_dim: 128
 
 batch_size: 512
-epochs: 8
+epochs: 5 # GRU train epochs
 lr: 0.001
 
 reward_type: centered   # centered | scaled

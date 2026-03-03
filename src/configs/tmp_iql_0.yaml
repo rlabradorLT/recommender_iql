@@ -1,0 +1,17 @@
+batch_size: 4096
+emb_dim: 64
+epochs: 10
+expectile: 0.7590524052184315
+experiment_name: optuna_trial_0
+gamma: 0.8800716118997923
+grad_clip_norm: 10.0
+hidden1: 256
+hidden2: 128
+log_diagnostics: false
+lr_q: 1.0095045796727981e-05
+lr_v: 1.593974567426406e-05
+output_root: ../runs
+seed: 0
+tau_polyak: 0.014116095493014139
+train_npz: ../data/processed/electronics_seq50_679071_20260303_202212/rl_train.npz
+weight_decay: 0.0

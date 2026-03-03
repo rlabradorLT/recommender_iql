@@ -1,0 +1,11 @@
+batch_size: 4096
+beta: 2.557872464834178
+emb_dim: 64
+epochs: 3
+experiment_name: optuna_awr_0
+grad_clip: 10.0
+iql_ckpt: ../runs/optuna_trial_0_808618_20260303_221642/iql_checkpoint.pt
+lr: 0.0003
+max_weight: 20.0
+output_root: ../runs
+train_npz: ../data/processed/electronics_seq50_679071_20260303_202212/rl_train.npz

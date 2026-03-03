@@ -4,7 +4,7 @@ raw
 processed
 models
 trash
-
+runs
 >>>>>>> 4a2ef19 (Inicialización del repositorio)
 # Byte-compiled / optimized / DLL files
 __pycache__/

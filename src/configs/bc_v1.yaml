@@ -1,6 +1,6 @@
 experiment_name: bc_default
 
-train_npz: ../data/processed/electronics_seq50_xxxxx/rl_train.npz
+train_npz: ../data/processed/electronics_seq50_679071_20260303_202212/rl_train.npz
 output_root: ../runs
 
 lr: 0.0003

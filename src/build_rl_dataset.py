@@ -359,5 +359,6 @@ def save_npz(name, data):
 save_npz("rl_train.npz", rl_train)
 save_npz("rl_val.npz", rl_val)
 save_npz("rl_test.npz", rl_test)
+events.to_parquet(OUTPUT_DIR / "events_with_split.parquet")
 
 print("DONE. Files saved in:", OUTPUT_DIR)

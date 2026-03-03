@@ -1,7 +1,7 @@
 experiment_name: awr_beta1
 
-train_npz: ../data/processed/electronics_seq50_xxxxx/rl_train.npz
-iql_ckpt: ../models/iql_discrete_gamma0.95_tau0.7.pt
+train_npz: ../data/processed/electronics_seq50_679071_20260303_202212/rl_train.npz
+iql_ckpt: ../runs/iql_gamma0.95_549184_20260303_204824/iql_checkpoint.pt
 output_root: ../runs
 
 beta: 1.0
