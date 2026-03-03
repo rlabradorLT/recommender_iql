@@ -1,0 +1,18 @@
+experiment_name: electronics_seq50
+
+raw_path: ../data/raw/Electronics_5.json
+output_root: ../data/processed
+
+pad_item_id: 0
+max_seq_len: 50
+
+emb_dim: 64
+hid_dim: 128
+
+batch_size: 512
+epochs: 8
+lr: 0.001
+
+reward_type: centered   # centered | scaled
+val_ratio: 0.8
+test_ratio: 0.9

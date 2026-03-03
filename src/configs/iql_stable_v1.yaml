@@ -1,0 +1,26 @@
+experiment_name: iql_gamma0
+
+train_npz: ../data/processed/electronics_seq50_xxxxx/rl_train.npz
+output_root: ../runs
+
+seed: 0
+
+gamma: 0.0
+expectile: 0.7
+
+lr_q: 0.0001
+lr_v: 0.0001
+
+batch_size: 4096
+epochs: 20
+
+emb_dim: 64
+hidden1: 256
+hidden2: 128
+
+tau_polyak: 0.005
+grad_clip_norm: 10.0
+weight_decay: 0.0
+
+center_reward: false
+log_every_n_steps: 200

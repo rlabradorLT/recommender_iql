@@ -1,0 +1,7 @@
+d3rlpy==2.8.1
+numpy==2.4.2
+pandas==3.0.1
+scikit_learn==1.8.0
+sentence_transformers==5.2.3
+torch==2.5.1+cu121
+tqdm==4.67.3
