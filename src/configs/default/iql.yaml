@@ -1,75 +1,60 @@
-experiment_name: experiment_name_placeholder
+# ============================================================
+# Run
+# ============================================================
+experiment_name: "iql_discrete_faithful"
+output_root: "./runs"
+seed: 0
 
-train_npz: ../data/processed/dataset_name_placeholder/rl_train.npz
-output_root: ../runs
+# ============================================================
+# Data (npz expected keys:
+# observations, next_observations, actions, rewards, terminals
+# and optionally num_items (recommended)
+# ============================================================
+train_npz: "./data/train.npz"
 
-seed: 0   # semilla para reproducibilidad
-
-
-# ==============================
-# RL PARAMETERS
-# ==============================
-
-gamma: 0.95
-# factor de descuento del reward futuro
-# en recomendación suele ser 0.9-0.99
-# en recomendación secuencial con sesiones cortas, rewards rápidos y horizonte corto mejor 0.9
-
+# ============================================================
+# IQL algorithm
+# ============================================================
+gamma: 0.99
 expectile: 0.7
-# parámetro clave de IQL
-# controla cuánto se aproxima el value a la parte alta de Q
-# valores típicos: 0.7-0.9
-# en datasets con rewards densos 0.8-0.9
+tau_polyak: 0.005
 
-
-# ==============================
-# LEARNING RATES
-# ==============================
-
-lr_q: 0.0001   # learning rate del Q-network
-lr_v: 0.0001   # learning rate del value network
-# Suelen ser iguales, o lr_q = lr_v * 0.5
-
-# ==============================
-# TRAINING
-# ==============================
-
+# ============================================================
+# Critic/Value training
+# ============================================================
+critic_epochs: 100
 batch_size: 4096
-epochs: 50
-# RL necesita más epochs que BC
+lr_q: 0.0003
+lr_v: 0.0003
+weight_decay: 0.0
+grad_clip_norm: 10.0
 
-
-# ==============================
-# NETWORK ARCHITECTURE
-# ==============================
-
+# ============================================================
+# Networks
+# ============================================================
 emb_dim: 64
 hidden1: 256
-hidden2: 128
+hidden2: 256
 
+# ============================================================
+# Policy extraction (AWBC como en IQL)
+# weights = exp(beta * (minQ - V))
+# ============================================================
+train_policy: true
+policy_epochs: 50
+lr_pi: 0.0003
+beta: 3.0
+max_weight: 100.0
+policy_grad_clip: 10.0
 
-# ==============================
-# STABILIZATION
-# ==============================
+# ============================================================
+# Optional stabilizers (set null for faithful-by-default)
+# If you want: clamp_adv_min: -20.0, clamp_adv_max: 20.0
+# ============================================================
+clamp_adv_min: null
+clamp_adv_max: null
 
-tau_polyak: 0.005
-# coeficiente de actualización suave del target network
-
-grad_clip_norm: 10.0
-# clipping del gradiente para estabilidad
-
-weight_decay: 0.0
-# regularización L2
-
-
-# ==============================
-# LOGGING
-# ==============================
-
-log_diagnostics: true
-# imprime métricas internas durante entrenamiento
-
-#center_reward: true
-# opción para centrar rewards si fuera necesario
-
-#log_every_n_steps: 200
+# ============================================================
+# Logging
+# ============================================================
+log_every_epochs: 1
