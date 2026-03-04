@@ -159,7 +159,7 @@ def main():
     terminals = torch.tensor(d["terminals"], dtype=torch.float32)
 
     N, state_dim = obs.shape
-    num_items = int(actions.max()) + 1
+    num_items = int(d["num_items"])
 
     print("Transitions:", N)
     print("State dim:", state_dim)
