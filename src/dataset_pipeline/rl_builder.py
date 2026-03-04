@@ -1,5 +1,6 @@
 # src/dataset_pipeline/rl_builder.py
 
+from asyncio import events
 import numpy as np
 import torch
 
@@ -12,12 +13,11 @@ def build_rl_split(events, split_name, encoder, hid_dim, device, num_items):
     obs_list, next_obs_list = [], []
     act_list, rew_list, done_list = [], [], []
 
-    split_df = events[events["split"] == split_name]
-
-    for uid, g in split_df.groupby("session_id", sort=False):
+    for uid, g in events.groupby("session_id", sort=False):
 
         items = g["item_id"].to_numpy(dtype=np.int64)
         rewards = g["reward"].to_numpy(dtype=np.float32)
+        splits = g["split"].to_numpy()
 
         if len(items) < 2:
             continue
@@ -25,7 +25,6 @@ def build_rl_split(events, split_name, encoder, hid_dim, device, num_items):
         h = torch.zeros((1, 1, hid_dim), device=device)
 
         x0 = torch.tensor([[items[0]]], device=device)
-
         _, h = encoder(x0, h)
 
         for t in range(1, len(items)):
@@ -36,21 +35,22 @@ def build_rl_split(events, split_name, encoder, hid_dim, device, num_items):
             r = rewards[t]
 
             xt = torch.tensor([[a]], device=device)
-
             _, h2 = encoder(xt, h)
 
             s2 = h2[0, 0].cpu().numpy().astype(np.float32)
 
             done = 1.0 if (t == len(items) - 1) else 0.0
 
-            obs_list.append(s)
-            act_list.append(a)
-            rew_list.append(r)
-            next_obs_list.append(s2)
-            done_list.append(done)
+            if splits[t] == split_name:
 
-            h = h2
+                obs_list.append(s)
+                act_list.append(a)
+                rew_list.append(r)
+                next_obs_list.append(s2)
+                done_list.append(done)
 
+        h = h2
+        
     return {
         "observations": np.stack(obs_list),
         "actions": np.array(act_list, dtype=np.int32),

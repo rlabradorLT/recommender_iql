@@ -14,7 +14,7 @@ def build_candidates(rl_npz_path, num_negatives):
     d = np.load(rl_npz_path)
     actions = d["actions"].reshape(-1).astype(np.int64)
 
-    num_items = int(actions.max()) + 1
+    num_items = int(d["num_items"])
     N = len(actions)
 
     candidates = np.empty((N, num_negatives + 1), dtype=np.int32)
