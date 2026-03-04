@@ -1,7 +1,7 @@
-experiment_name: kuairec_v2
+experiment_name: awr_small_matrix_kuairec
 
-train_npz: ../data/processed/small_kuairec_scaled_20260304_110219/rl_train.npz
-iql_ckpt: ../runs/kuairec_v2_918285_20260304_145136/iql_checkpoint.pt
+train_npz: ../data/processed/small_matrix_kuairec_20260304_190839/rl_train.npz
+iql_ckpt: ../runs/iql_small_matrix_kuairec_580073_20260304_203811/iql_checkpoint.pt
 # checkpoint del IQL usado para calcular ventajas
 
 output_root: ../runs

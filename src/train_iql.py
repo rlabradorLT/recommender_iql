@@ -227,7 +227,9 @@ def main():
                 q_sa = Q(s, a)
 
             v_s = V(s)
-            diff = q_sa - v_s
+
+            diff = torch.clamp(q_sa - v_s, -20.0, 20.0)
+
             v_loss = expectile_loss(diff, cfg.expectile)
 
             v_opt.zero_grad(set_to_none=True)
@@ -242,8 +244,10 @@ def main():
             with torch.no_grad():
                 v_next = V_target(s_next)
                 target = r + cfg.gamma * (1.0 - done) * v_next
+                target = torch.clamp(target, -10.0, 10.0)
 
             q_pred = Q(s, a)
+
             q_loss = mse(q_pred, target)
 
             q_opt.zero_grad(set_to_none=True)

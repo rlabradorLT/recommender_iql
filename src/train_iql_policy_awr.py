@@ -284,7 +284,11 @@ def main():
         },
         run_dir / "policy.pt"
     )
-
+    print("adv mean:", adv.mean().item())
+    print("adv std :", adv.std().item())
+    print("weight mean:", w.mean().item())
+    print("weight max :", w.max().item())
+    
     print("=" * 60)
     print("Training complete.")
     print("Saved policy to:", run_dir / "policy.pt")

@@ -1,6 +1,6 @@
-experiment_name: kuairec_v2
+experiment_name: iql_small_matrix_kuairec
 
-train_npz: ../data/processed/small_kuairec_scaled_20260304_110219/rl_train.npz
+train_npz: ../data/processed/small_matrix_kuairec_20260304_190839/rl_train.npz
 output_root: ../runs
 
 seed: 0   # semilla para reproducibilidad
@@ -26,8 +26,8 @@ expectile: 0.7
 # LEARNING RATES
 # ==============================
 
-lr_q: 0.0001   # learning rate del Q-network
-lr_v: 0.0001   # learning rate del value network
+lr_q: 0.00001  # learning rate del Q-network
+lr_v: 0.00001   # learning rate del value network
 # Suelen ser iguales, o lr_q = lr_v * 0.5
 
 # ==============================
@@ -35,7 +35,7 @@ lr_v: 0.0001   # learning rate del value network
 # ==============================
 
 batch_size: 4096
-epochs: 50
+epochs: 20
 # RL necesita más epochs que BC
 
 

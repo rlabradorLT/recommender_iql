@@ -1,9 +1,9 @@
-experiment_name: experiment_name_placeholder   # nombre del experimento para organizar outputs
+experiment_name: small_matrix_kuairec   # nombre del experimento para organizar outputs
 
 seed: 42   # semilla para reproducibilidad en splits y entrenamiento
 
-dataset: dataset_placeholder   # tipo de dataset utilizado
-raw_path: ../data/raw/dataset_placeholder.json   # ruta al dataset raw
+dataset: kuairec   # tipo de dataset utilizado
+raw_path: ../data/raw/kuairec/KuaiRec 2.0/data/small_matrix.csv   # ruta al dataset raw
 
 output_root: ../data/processed   # directorio donde se guardará el dataset procesado
 
@@ -45,7 +45,7 @@ lr: 0.001          # learning rate del modelo secuencial
 # REWARD CONSTRUCTION
 # ==============================
 
-reward_type: centered   # forma de calcular reward
+reward_type: scaled   # forma de calcular reward
 # centered -> rating normalizado respecto al promedio
 # scaled   -> rating escalado [0,1]
 # custom   -> reward definido manualmente
@@ -55,8 +55,8 @@ reward_type: centered   # forma de calcular reward
 # DATA SPLITS
 # ==============================
 
-val_ratio: 0.8   # proporción del dataset usada para train/val split
-test_ratio: 0.9  # proporción usada para separar test
+val_ratio: 0.1   # proporción del dataset usada para train/val split
+test_ratio: 0.1  # proporción usada para separar test
 
 # ejemplo:
 # 0-0.8 train

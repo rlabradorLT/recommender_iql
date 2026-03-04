@@ -1,6 +1,6 @@
-experiment_name: experiment_name_placeholder   # nombre del experimento
+experiment_name: bc_small_matrix_kuairec   # nombre del experimento
 
-train_npz: ../data/processed/dataset_name_placeholder/rl_train.npz
+train_npz: ../data/processed/small_matrix_kuairec_20260304_190839/rl_train.npz
 # dataset offline en formato MDP
 
 output_root: ../runs   # directorio donde guardar checkpoints y logs

@@ -1,5 +1,5 @@
 dataset:
-  dataset_dir: ../data/processed/dataset_name_placeholder
+  dataset_dir: ../data/processed/small_matrix_kuairec_20260304_190839
   # directorio del dataset procesado que contiene los splits
 
 
