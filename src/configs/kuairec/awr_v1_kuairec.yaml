@@ -1,0 +1,15 @@
+experiment_name: awr_kuairec_scaled
+
+train_npz:  ../data/processed/small_kuairec_scaled_20260304_110219/rl_train.npz
+iql_ckpt: ../runs/iql_kuairec_v1_scaled_216808_20260304_114826/iql_checkpoint.pt
+output_root: ../runs
+
+beta: 2.3685787484961764
+max_weight: 20.0
+
+epochs: 5
+batch_size: 4096
+lr: 0.0003
+grad_clip: 10.0
+
+emb_dim: 64

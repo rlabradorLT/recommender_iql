@@ -1,0 +1,27 @@
+experiment_name: iql_kuairec_v1_scaled
+
+train_npz: ../data/processed/small_kuairec_scaled_20260304_110219/rl_train.npz
+output_root: ../runs
+
+seed: 0
+
+gamma: 0.9
+expectile: 0.9
+
+lr_q: 0.0002638485306265945
+lr_v: 2.42323266214387e-05
+
+batch_size: 4096
+epochs: 20
+
+emb_dim: 64
+hidden1: 256
+hidden2: 128
+
+tau_polyak: 0.01841783271744644
+grad_clip_norm: 10.0
+weight_decay: 0.0
+
+log_diagnostics: true
+# center_reward: true
+#log_every_n_steps: 200

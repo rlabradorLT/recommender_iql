@@ -1,0 +1,8 @@
+dataset_dir: ../data/processed/small_kuairec_20260304_092017
+
+split: test
+eval_batch: 2048
+
+bc_ckpt: ../runs/bc_kuairec_v1_262333_20260304_101634/bc_model.pt
+iql_ckpt: ../runs/iql_kuairec_v1_413852_20260304_102716/iql_checkpoint.pt
+awr_ckpt: ../runs/awr_kuairec_684266_20260304_104258/policy.pt

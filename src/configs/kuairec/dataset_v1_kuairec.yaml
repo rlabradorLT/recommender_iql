@@ -1,0 +1,21 @@
+experiment_name: small_kuairec_scaled
+
+seed: 42
+
+dataset: kuairec
+raw_path: ../data/raw/kuairec/KuaiRec 2.0/data/small_matrix.csv
+output_root: ../data/processed
+
+pad_item_id: 0
+max_seq_len: 50
+
+emb_dim: 64
+hid_dim: 128
+
+batch_size: 512
+epochs: 5 # GRU train epochs
+lr: 0.001
+
+reward_type: scaled   # centered | scaled | custom
+val_ratio: 0.8
+test_ratio: 0.9

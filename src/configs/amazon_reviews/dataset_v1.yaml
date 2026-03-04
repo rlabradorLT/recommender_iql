@@ -16,6 +16,6 @@ batch_size: 512
 epochs: 5 # GRU train epochs
 lr: 0.001
 
-reward_type: centered   # centered | scaled
+reward_type: centered   # centered | scaled | custom
 val_ratio: 0.8
 test_ratio: 0.9

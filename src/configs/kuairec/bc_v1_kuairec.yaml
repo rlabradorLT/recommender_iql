@@ -1,0 +1,12 @@
+experiment_name: bc_kuairec_v1_scaled
+
+train_npz: ../data/processed/small_kuairec_scaled_20260304_110219/rl_train.npz
+output_root: ../runs
+
+lr: 0.0003
+batch_size: 4096
+epochs: 10
+
+hidden1: 256
+hidden2: 128
+emb_dim: 64

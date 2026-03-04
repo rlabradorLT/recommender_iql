@@ -56,6 +56,9 @@ class AmazonReviewsAdapter(DatasetAdapter):
         elif cfg.reward_type == "scaled":
 
             events["reward"] = ((events["overall"] - 1.0) / 4.0).clip(0.0, 1.0)
+        
+        elif cfg.reward_type == "custom":
+            pass
 
         else:
             raise ValueError("Unknown reward_type")

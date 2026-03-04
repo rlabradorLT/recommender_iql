@@ -1,0 +1,12 @@
+experiment_name: bc_default
+
+train_npz: ../data/processed/electronics_seq50_679071_20260303_202212/rl_train.npz
+output_root: ../runs
+
+lr: 0.0003
+batch_size: 4096
+epochs: 10
+
+hidden1: 256
+hidden2: 128
+emb_dim: 64

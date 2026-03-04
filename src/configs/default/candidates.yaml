@@ -1,0 +1,8 @@
+dataset:
+  dataset_dir: ../data/processed/small_kuairec_scaled_20260304_110219
+
+candidates:
+  num_negatives: 100
+  splits:
+    - val
+    - test
