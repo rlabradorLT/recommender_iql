@@ -7,6 +7,9 @@ from pathlib import Path
 @dataclass
 class DatasetConfig:
     experiment_name: str
+    seed: int
+
+    dataset: str
     raw_path: str
     output_root: str
 

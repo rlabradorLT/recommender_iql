@@ -1,6 +1,9 @@
 experiment_name: electronics_seq50
 
-raw_path: ../data/raw/Electronics_5.json
+seed: 42
+
+dataset: amazon_reviews
+raw_path: ../data/raw/amazon_reviews/Electronics_5.json
 output_root: ../data/processed
 
 pad_item_id: 0
