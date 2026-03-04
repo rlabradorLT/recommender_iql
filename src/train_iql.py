@@ -111,6 +111,7 @@ class VNetwork(nn.Module):
 # ============================================================
 
 def expectile_loss(diff, tau):
+    tau = float(str(tau).strip().rstrip(','))
     weight = torch.where(diff > 0, tau, 1.0 - tau)
     return (weight * diff.pow(2)).mean()
 
