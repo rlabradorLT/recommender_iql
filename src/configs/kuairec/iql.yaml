@@ -1,0 +1,75 @@
+experiment_name: kuairec_v2
+
+train_npz: ../data/processed/small_kuairec_scaled_20260304_110219/rl_train.npz
+output_root: ../runs
+
+seed: 0   # semilla para reproducibilidad
+
+
+# ==============================
+# RL PARAMETERS
+# ==============================
+
+gamma: 0.95
+# factor de descuento del reward futuro
+# en recomendación suele ser 0.9-0.99
+# en recomendación secuencial con sesiones cortas, rewards rápidos y horizonte corto mejor 0.9
+
+expectile: 0.7
+# parámetro clave de IQL
+# controla cuánto se aproxima el value a la parte alta de Q
+# valores típicos: 0.7-0.9
+# en datasets con rewards densos 0.8-0.9
+
+
+# ==============================
+# LEARNING RATES
+# ==============================
+
+lr_q: 0.0001   # learning rate del Q-network
+lr_v: 0.0001   # learning rate del value network
+# Suelen ser iguales, o lr_q = lr_v * 0.5
+
+# ==============================
+# TRAINING
+# ==============================
+
+batch_size: 4096
+epochs: 50
+# RL necesita más epochs que BC
+
+
+# ==============================
+# NETWORK ARCHITECTURE
+# ==============================
+
+emb_dim: 64
+hidden1: 256
+hidden2: 128
+
+
+# ==============================
+# STABILIZATION
+# ==============================
+
+tau_polyak: 0.005
+# coeficiente de actualización suave del target network
+
+grad_clip_norm: 10.0
+# clipping del gradiente para estabilidad
+
+weight_decay: 0.0
+# regularización L2
+
+
+# ==============================
+# LOGGING
+# ==============================
+
+log_diagnostics: true
+# imprime métricas internas durante entrenamiento
+
+#center_reward: true
+# opción para centrar rewards si fuera necesario
+
+#log_every_n_steps: 200

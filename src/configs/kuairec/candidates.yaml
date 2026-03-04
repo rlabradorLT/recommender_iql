@@ -1,0 +1,15 @@
+dataset:
+  dataset_dir: ../data/processed/dataset_name_placeholder
+  # directorio del dataset procesado que contiene los splits
+
+
+candidates:
+  num_negatives: 99
+  # número de ítems negativos muestreados para evaluación
+  # evaluación típica en recsys:
+  # 1 item positivo + 99 negativos
+
+  splits:
+    - val
+    - test
+  # splits donde se generarán los candidatos

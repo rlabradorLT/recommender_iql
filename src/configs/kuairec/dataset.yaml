@@ -1,0 +1,64 @@
+experiment_name: experiment_name_placeholder   # nombre del experimento para organizar outputs
+
+seed: 42   # semilla para reproducibilidad en splits y entrenamiento
+
+dataset: dataset_placeholder   # tipo de dataset utilizado
+raw_path: ../data/raw/dataset_placeholder.json   # ruta al dataset raw
+
+output_root: ../data/processed   # directorio donde se guardará el dataset procesado
+
+
+# ==============================
+# SEQUENTIAL STATE REPRESENTATION
+# ==============================
+
+pad_item_id: 0     # id reservado para padding en secuencias
+max_seq_len: 50    # longitud máxima del histórico del usuario (estado del MDP)
+
+# En sistemas secuenciales se usa una ventana fija del historial reciente
+
+
+# ==============================
+# EMBEDDING / STATE MODEL
+# ==============================
+
+emb_dim: 64        # dimensión de embeddings de ítems
+hid_dim: 128       # dimensión oculta del modelo GRU que genera el estado
+
+# Valores típicos en recsys:
+# embeddings: 32-128
+# hidden state: 64-256
+
+
+# ==============================
+# TRAINING DEL MODELO DE ESTADO (GRU)
+# ==============================
+
+batch_size: 512
+epochs: 5          # número de epochs para entrenar el encoder secuencial
+lr: 0.001          # learning rate del modelo secuencial
+
+# El encoder solo aprende representaciones de usuario a partir de secuencias
+
+
+# ==============================
+# REWARD CONSTRUCTION
+# ==============================
+
+reward_type: centered   # forma de calcular reward
+# centered -> rating normalizado respecto al promedio
+# scaled   -> rating escalado [0,1]
+# custom   -> reward definido manualmente
+
+
+# ==============================
+# DATA SPLITS
+# ==============================
+
+val_ratio: 0.8   # proporción del dataset usada para train/val split
+test_ratio: 0.9  # proporción usada para separar test
+
+# ejemplo:
+# 0-0.8 train
+# 0.8-0.9 validation
+# 0.9-1.0 test

@@ -1,0 +1,37 @@
+experiment_name: kuairec_v2
+
+train_npz: ../data/processed/small_kuairec_scaled_20260304_110219/rl_train.npz
+iql_ckpt: ../runs/kuairec_v2_918285_20260304_145136/iql_checkpoint.pt
+# checkpoint del IQL usado para calcular ventajas
+
+output_root: ../runs
+
+
+# ==============================
+# AWR PARAMETERS
+# ==============================
+
+beta: 1.0
+# temperatura de la ponderación exponencial
+# controla cuánto priorizar acciones con mayor ventaja
+
+max_weight: 20.0
+# clipping de pesos para evitar inestabilidad
+
+
+# ==============================
+# TRAINING
+# ==============================
+
+epochs: 5
+batch_size: 4096
+lr: 0.0003
+
+grad_clip: 10.0
+
+
+# ==============================
+# NETWORK
+# ==============================
+
+emb_dim: 64

@@ -1,0 +1,8 @@
+dataset_dir: ../data/processed/dataset_placeholder
+
+split: test # test | val
+eval_batch: 2048
+
+bc_ckpt: ../runs/experiment_name_placeholder/bc_model.pt
+iql_ckpt: ../runs/experiment_name_placeholder/iql_checkpoint.pt
+awr_ckpt: ../runs/experiment_name_placeholder/policy.pt

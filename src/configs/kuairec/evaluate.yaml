@@ -4,5 +4,5 @@ split: test
 eval_batch: 2048
 
 bc_ckpt: ../runs/bc_kuairec_v1_scaled_512108_20260304_113247/bc_model.pt
-iql_ckpt: ../runs/iql_kuairec_v1_scaled_216808_20260304_114826/iql_checkpoint.pt
-awr_ckpt: ../runs/awr_kuairec_scaled_405308_20260304_122431/policy.pt
+iql_ckpt: ../runs/kuairec_v2_918285_20260304_145136/iql_checkpoint.pt
+awr_ckpt: ../runs/kuairec_v2_369715_20260304_171831/policy.pt

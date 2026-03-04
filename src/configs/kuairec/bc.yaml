@@ -1,0 +1,29 @@
+experiment_name: experiment_name_placeholder   # nombre del experimento
+
+train_npz: ../data/processed/dataset_name_placeholder/rl_train.npz
+# dataset offline en formato MDP
+
+output_root: ../runs   # directorio donde guardar checkpoints y logs
+
+
+# ==============================
+# OPTIMIZACIÓN
+# ==============================
+
+lr: 0.0003      # learning rate Adam
+batch_size: 4096
+epochs: 10
+
+# BC suele converger rápido porque es aprendizaje supervisado
+
+
+# ==============================
+# ARQUITECTURA DE LA POLICY
+# ==============================
+
+hidden1: 256
+hidden2: 128
+# arquitectura típica MLP para política discreta
+
+emb_dim: 64
+# dimensión del estado (embedding de usuario)
