@@ -5,8 +5,10 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 from tqdm import tqdm
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from pathlib import Path
+import time
+import json
 
 from dqn.q_network import QNetwork
 from dqn.v_network import VNetwork
@@ -22,9 +24,11 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 @dataclass
 class PolicyConfig:
 
+    experiment_name: str
+
     train_npz: str
     iql_checkpoint: str
-    output_policy: str
+    output_root: str
 
     batch_size: int
     policy_epochs: int
@@ -38,6 +42,13 @@ class PolicyConfig:
     hidden1: int
     hidden2: int
 
+def make_run_dir(output_root: str, experiment_name: str, cfg: dict) -> Path:
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    cfg_hash = str(abs(hash(json.dumps(cfg, sort_keys=True))))[:6]
+    run_dir = Path(output_root) / f"{experiment_name}_{cfg_hash}_{ts}"
+    run_dir.mkdir(parents=True, exist_ok=False)
+    (run_dir / "config.json").write_text(json.dumps(cfg, indent=2))
+    return run_dir
 
 # ============================================================
 # Dataset
@@ -67,6 +78,8 @@ def load_dataset(npz_path, batch_size):
 # ============================================================
 
 def train_policy(cfg: PolicyConfig):
+    run_dir = make_run_dir(cfg.output_root, cfg.experiment_name, asdict(cfg))
+    print("Run dir:", run_dir)
 
     ckpt = torch.load(cfg.iql_checkpoint, map_location=DEVICE)
 
@@ -186,10 +199,10 @@ def train_policy(cfg: PolicyConfig):
             "state_dim": state_dim,
             "num_actions": num_actions
         },
-        cfg.output_policy
+        run_dir / "iql_policy.pt",
     )
 
-    print("Policy saved to:", cfg.output_policy)
+    print("Policy saved to:", run_dir / "iql_policy.pt")
 
 
 # ============================================================
