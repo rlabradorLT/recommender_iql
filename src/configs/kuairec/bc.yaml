@@ -1,29 +1,17 @@
-experiment_name: bc_small_matrix_kuairec   # nombre del experimento
+experiment_name: "bc_discrete_aligned"
 
-train_npz: ../data/processed/small_matrix_kuairec_20260304_190839/rl_train.npz
-# dataset offline en formato MDP
+train_npz: ../data/processed/tu_dataset/rl_train.npz
+output_root: ../runs
 
-output_root: ../runs   # directorio donde guardar checkpoints y logs
-
-
-# ==============================
-# OPTIMIZACIÓN
-# ==============================
-
-lr: 0.0003      # learning rate Adam
 batch_size: 4096
-epochs: 10
+epochs: 20
 
-# BC suele converger rápido porque es aprendizaje supervisado
+lr: 0.0003
+weight_decay: 0.0
+grad_clip_norm: 5.0
 
+hidden1: 512
+hidden2: 512
 
-# ==============================
-# ARQUITECTURA DE LA POLICY
-# ==============================
-
-hidden1: 256
-hidden2: 128
-# arquitectura típica MLP para política discreta
-
-emb_dim: 64
-# dimensión del estado (embedding de usuario)
+label_smoothing: 0.0
+seed: 0
