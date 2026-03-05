@@ -34,14 +34,14 @@ grad_clip_norm: 10.0
 # Networks
 # ============================================================
 emb_dim: 64
-hidden1: 256
-hidden2: 256
+hidden1: 512
+hidden2: 512
 
 # ============================================================
 # Policy extraction (AWBC como en IQL)
 # weights = exp(beta * (minQ - V))
 # ============================================================
-train_policy: true
+train_policy: false
 policy_epochs: 10
 lr_pi: 0.0003
 beta: 3.0

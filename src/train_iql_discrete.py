@@ -70,6 +70,7 @@ class IQLDiscreteConfig:
     batch_size: int
     lr_q: float
     lr_v: float
+    
     weight_decay: float
     grad_clip_norm: float
 
