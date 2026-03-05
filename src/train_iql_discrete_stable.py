@@ -230,6 +230,8 @@ def train(cfg: Config):
         v_loss_sum = 0.0
         adv_accum = []
         td_accum = []
+        v_values = []
+        q_values = []
 
         pbar = tqdm(loader, desc=f"[IQL-stable] epoch {epoch}/{cfg.epochs}", leave=False)
         for s, a, r, s_next, done in pbar:
@@ -254,6 +256,8 @@ def train(cfg: Config):
 
             v_s = V(s)
             diff = q_sa - v_s
+            v_values.append(v_s.detach().cpu())
+            q_values.append(q_sa.detach().cpu())
 
             if cfg.clamp_adv_min is not None or cfg.clamp_adv_max is not None:
                 mn = cfg.clamp_adv_min if cfg.clamp_adv_min is not None else float("-inf")
@@ -318,11 +322,17 @@ def train(cfg: Config):
 
         adv_all = torch.cat(adv_accum)
         td_all = torch.cat(td_accum)
-
+        v_all = torch.cat(v_values)
+        q_all_epoch = torch.cat(q_values)
+        
         row = {
             "epoch": epoch,
             "q_loss": q_loss_sum / len(loader),
             "v_loss": v_loss_sum / len(loader),
+            "v_mean": float(v_all.mean().item()),
+            "v_std": float(v_all.std().item()),
+            "q_mean": float(q_all_epoch.mean().item()),
+            "q_std": float(q_all_epoch.std().item()),
             "adv_mean": float(adv_all.mean().item()),
             "adv_std": float(adv_all.std().item()),
             "adv_min": float(adv_all.min().item()),
@@ -336,7 +346,8 @@ def train(cfg: Config):
             print(
                 f"[IQL-stable] epoch {epoch:03d} | "
                 f"Qloss {row['q_loss']:.6f} | Vloss {row['v_loss']:.6f} | "
-                f"Adv std {row['adv_std']:.6f} | TD std {row['td_std']:.6f}"
+                f"Vmean {row['v_mean']:.3f} | Qmean {row['q_mean']:.3f} | "
+                f"Adv std {row['adv_std']:.6f}"
             )
 
         # Hard stop if NaN (better fail-fast)
