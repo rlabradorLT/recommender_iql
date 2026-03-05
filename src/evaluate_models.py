@@ -5,7 +5,6 @@ from pathlib import Path
 import yaml
 import numpy as np
 import torch
-import torch.nn as nn
 from tqdm import tqdm
 
 from dqn.q_network import QNetwork
@@ -56,14 +55,12 @@ def compute_ranking_metrics(score_fn, obs, candidates, batch_size, ks):
             sums[f"NDCG@{k}"] += ndcg.sum().item()
 
         sums["MRR"] += (1.0 / rank.float()).sum().item()
-
         sums["MeanRank"] += rank.sum().item()
 
         total += scores.shape[0]
 
-    metrics = {k: v / total for k, v in sums.items()}
+    return {k: v / total for k, v in sums.items()}
 
-    return metrics
 
 # ============================================================
 # DATA
@@ -86,7 +83,7 @@ def load_split(dataset_dir, split):
 
 
 # ============================================================
-# MODEL SCORERS
+# MODEL BUILDERS
 # ============================================================
 
 def build_iql_scorer(ckpt_path, num_items, hidden1, hidden2):
@@ -152,9 +149,7 @@ def build_policy_scorer(ckpt_path, num_items, hidden1, hidden2):
 def main():
 
     parser = argparse.ArgumentParser()
-
     parser.add_argument("--config", required=True)
-
     args = parser.parse_args()
 
     cfg = yaml.safe_load(open(args.config))
@@ -162,9 +157,7 @@ def main():
     dataset_dir = Path(cfg["dataset_dir"])
 
     split = cfg.get("split", "val")
-
     batch_size = cfg.get("eval_batch", 2048)
-
     ks = cfg.get("ks", [5,10,20])
 
     hidden1 = cfg.get("hidden1", 512)
@@ -175,44 +168,38 @@ def main():
     results = {}
 
     # ============================================================
-    # IQL CRITIC
+    # MODELS
     # ============================================================
 
-    if cfg.get("iql_ckpt"):
+    for name, model_cfg in cfg["models"].items():
 
-        print("Evaluating IQL critic")
+        print(f"\nEvaluating {name}")
 
-        scorer = build_iql_scorer(
-            cfg["iql_ckpt"],
-            num_items,
-            hidden1,
-            hidden2
-        )
+        mtype = model_cfg["type"]
+        ckpt = model_cfg["ckpt"]
 
-        results["IQL_Q"] = compute_ranking_metrics(
-            scorer,
-            obs,
-            candidates,
-            batch_size,
-            ks
-        )
+        if mtype == "critic":
 
-    # ============================================================
-    # POLICY
-    # ============================================================
+            scorer = build_iql_scorer(
+                ckpt,
+                num_items,
+                hidden1,
+                hidden2
+            )
 
-    if cfg.get("policy_ckpt"):
+        elif mtype == "policy":
 
-        print("Evaluating IQL policy")
+            scorer = build_policy_scorer(
+                ckpt,
+                num_items,
+                hidden1,
+                hidden2
+            )
 
-        scorer = build_policy_scorer(
-            cfg["policy_ckpt"],
-            num_items,
-            hidden1,
-            hidden2
-        )
+        else:
+            raise ValueError(f"Unknown model type {mtype}")
 
-        results["IQL_policy"] = compute_ranking_metrics(
+        results[name] = compute_ranking_metrics(
             scorer,
             obs,
             candidates,

@@ -1,14 +1,28 @@
-dataset_dir: "../data/processed/small_matrix_kuairec_20260304_190839"
+dataset_dir: ../data/processed/small_matrix_kuairec_20260304_190839
 
-split: val
+split: test
 
 eval_batch: 2048
 
-ks: [5, 10, 20]
+ks:
+  - 5
+  - 10
+  - 20
 
 hidden1: 512
 hidden2: 512
 
-iql_ckpt: "../runs/iql_discrete_faithful_768418_20260305_092236/iql_stable.pt"
 
-policy_ckpt: "../runs/iql_discrete_policy_314389_20260305_112620/iql_policy.pt"
+models:
+
+  BC:
+    type: policy
+    ckpt: ../runs/bc_discrete_aligned_368178_20260305_132221/bc_candidate.pt
+
+  IQL_policy:
+    type: policy
+    ckpt: ../runs/iql_discrete_policy_314389_20260305_112620/iql_policy.pt
+
+  IQL_Q:
+    type: critic
+    ckpt: ../runs/iql_discrete_faithful_768418_20260305_092236/iql_stable.pt

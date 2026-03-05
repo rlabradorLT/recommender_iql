@@ -11,17 +11,19 @@ import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
 
-from dqn.policiy_network import PolicyNet  # mismo que usas en IQL policy
+from dqn.policiy_network import PolicyNet
+
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 # ============================================================
-# Config (YAML)
+# Config
 # ============================================================
 
 @dataclass
 class BCConfig:
+
     experiment_name: str
     train_npz: str
     output_root: str
@@ -36,22 +38,31 @@ class BCConfig:
     hidden1: int
     hidden2: int
 
-    # Regularización opcional (útil en datasets grandes/sesgados)
-    label_smoothing: float  # 0.0 para BC puro
+    num_negatives: int
     seed: int
 
 
-def make_run_dir(output_root: str, experiment_name: str, cfg: dict) -> Path:
+# ============================================================
+# Utils
+# ============================================================
+
+def make_run_dir(output_root: str, experiment_name: str, cfg: dict):
+
     ts = time.strftime("%Y%m%d_%H%M%S")
     cfg_hash = str(abs(hash(json.dumps(cfg, sort_keys=True))))[:6]
+
     run_dir = Path(output_root) / f"{experiment_name}_{cfg_hash}_{ts}"
     run_dir.mkdir(parents=True, exist_ok=False)
+
     (run_dir / "config.json").write_text(json.dumps(cfg, indent=2))
+
     return run_dir
 
 
-def set_seed(seed: int):
+def set_seed(seed):
+
     import random
+
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -62,111 +73,189 @@ def set_seed(seed: int):
 # Dataset
 # ============================================================
 
-def load_dataset(npz_path: str, batch_size: int):
+def load_dataset(npz_path):
+
     d = np.load(npz_path)
 
     obs = torch.tensor(d["observations"], dtype=torch.float32)
     actions = torch.tensor(d["actions"].reshape(-1), dtype=torch.long)
 
     state_dim = obs.shape[1]
-    num_actions = int(d["num_items"])  # tu .npz usa num_items :contentReference[oaicite:4]{index=4}
+    num_actions = int(d["num_items"])
 
-    dataset = torch.utils.data.TensorDataset(obs, actions)
-    loader = torch.utils.data.DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        drop_last=True,
-        pin_memory=(DEVICE == "cuda"),
+    return obs, actions, state_dim, num_actions
+
+
+# ============================================================
+# Negative sampler
+# ============================================================
+
+def sample_negatives(batch_size, num_actions, positives, K):
+
+    neg = torch.randint(
+        low=0,
+        high=num_actions,
+        size=(batch_size, K),
+        device=positives.device
     )
-    return loader, state_dim, num_actions
+
+    mask = neg == positives.unsqueeze(1)
+
+    while mask.any():
+        neg[mask] = torch.randint(
+            0,
+            num_actions,
+            (mask.sum(),),
+            device=positives.device
+        )
+        mask = neg == positives.unsqueeze(1)
+
+    return neg
 
 
 # ============================================================
-# Train BC
+# Training
 # ============================================================
 
-def train_bc(cfg: BCConfig):
+def train(cfg: BCConfig):
+
     set_seed(cfg.seed)
+
     run_dir = make_run_dir(cfg.output_root, cfg.experiment_name, asdict(cfg))
+
     print("Run dir:", run_dir)
     print("Device:", DEVICE)
 
-    loader, state_dim, num_actions = load_dataset(cfg.train_npz, cfg.batch_size)
+    obs, actions, state_dim, num_actions = load_dataset(cfg.train_npz)
 
-    # PolicyNet -> logits sobre num_actions (idéntico a tu stack de policy) 
-    policy = PolicyNet(state_dim, num_actions, cfg.hidden1, cfg.hidden2).to(DEVICE)
+    dataset = torch.utils.data.TensorDataset(obs, actions)
+
+    loader = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=cfg.batch_size,
+        shuffle=True,
+        drop_last=True,
+        pin_memory=(DEVICE == "cuda")
+    )
+
+    policy = PolicyNet(
+        state_dim,
+        num_actions,
+        cfg.hidden1,
+        cfg.hidden2
+    ).to(DEVICE)
 
     optimizer = optim.Adam(
         policy.parameters(),
         lr=cfg.lr,
-        weight_decay=cfg.weight_decay,
+        weight_decay=cfg.weight_decay
     )
 
-    # BC oficial: CrossEntropyLoss sobre logits vs acción (máx. log-likelihood)
-    # label_smoothing=0.0 => BC “puro”
-    criterion = nn.CrossEntropyLoss(label_smoothing=cfg.label_smoothing)
-
     for epoch in range(1, cfg.epochs + 1):
+
         policy.train()
 
         loss_sum = 0.0
-        entropy_sum = 0.0
         n_batches = 0
 
-        pbar = tqdm(loader, desc=f"[BC] epoch {epoch}/{cfg.epochs}")
-        for s, a in pbar:
-            s = s.to(DEVICE, non_blocking=True)
-            a = a.to(DEVICE, non_blocking=True)
+        pbar = tqdm(loader, desc=f"[BC-Candidate] epoch {epoch}/{cfg.epochs}")
 
-            logits = policy(s)              # [B, num_actions]
-            loss = criterion(logits, a)
+        for s, a in pbar:
+
+            s = s.to(DEVICE)
+            a = a.to(DEVICE)
+
+            B = s.size(0)
+
+            neg = sample_negatives(
+                B,
+                num_actions,
+                a,
+                cfg.num_negatives
+            )
+
+            candidates = torch.cat(
+                [a.unsqueeze(1), neg],
+                dim=1
+            )
+
+            logits = policy(s)
+
+            cand_logits = logits.gather(
+                1,
+                candidates
+            )
+
+            target = torch.zeros(
+                B,
+                dtype=torch.long,
+                device=DEVICE
+            )
+
+            loss = nn.functional.cross_entropy(
+                cand_logits,
+                target
+            )
 
             optimizer.zero_grad(set_to_none=True)
+
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(policy.parameters(), cfg.grad_clip_norm)
+
+            torch.nn.utils.clip_grad_norm_(
+                policy.parameters(),
+                cfg.grad_clip_norm
+            )
+
             optimizer.step()
 
-            # (solo logging)
-            with torch.no_grad():
-                probs = torch.softmax(logits, dim=1)
-                entropy = -(probs * torch.log(probs + 1e-8)).sum(dim=1).mean()
-
-            loss_sum += float(loss.item())
-            entropy_sum += float(entropy.item())
+            loss_sum += loss.item()
             n_batches += 1
 
-            pbar.set_postfix(loss=f"{loss_sum/n_batches:.5f}", ent=f"{entropy_sum/n_batches:.3f}")
+            pbar.set_postfix(
+                loss=f"{loss_sum / n_batches:.5f}"
+            )
 
         print(
-            f"[BC] epoch {epoch:02d} | "
-            f"loss {loss_sum/n_batches:.6f} | "
-            f"entropy {entropy_sum/n_batches:.3f}"
+            f"[BC-Candidate] epoch {epoch:02d} | "
+            f"loss {loss_sum / n_batches:.6f}"
         )
 
-    # Guardado ALINEADO con evaluate_models.build_policy_scorer:
-    # ckpt["policy"] + state_dim + num_actions 
-    ckpt_path = run_dir / "bc_policy.pt"
+    ckpt_path = run_dir / "bc_candidate.pt"
+
     torch.save(
         {
             "policy": policy.state_dict(),
             "state_dim": state_dim,
-            "num_actions": num_actions,
+            "num_actions": num_actions
         },
-        ckpt_path,
+        ckpt_path
     )
-    print("BC policy saved to:", ckpt_path)
 
+    print("Saved:", ckpt_path)
+
+
+# ============================================================
+# Main
+# ============================================================
 
 def main():
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", required=True)
+
+    parser.add_argument(
+        "--config",
+        required=True
+    )
+
     args = parser.parse_args()
 
     with open(args.config) as f:
-        cfg = BCConfig(**yaml.safe_load(f))
 
-    train_bc(cfg)
+        cfg = BCConfig(
+            **yaml.safe_load(f)
+        )
+
+    train(cfg)
 
 
 if __name__ == "__main__":
