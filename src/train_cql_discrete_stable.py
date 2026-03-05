@@ -1,17 +1,15 @@
 # train_cql_discrete_stable.py
 # ------------------------------------------------------------
-# Conservative Q-Learning (CQL) for OFFLINE RL with DISCRETE actions
-# Designed for large action spaces (e.g., recsys items) and stability.
+# Conservative Q-Learning (CQL) - DISCRETE, OFFLINE, LARGE ACTION SPACE
 #
-# Aligns with CQL(H) in the paper (discrete setting): add conservative penalty
-#   alpha * ( logsumexp_a Q(s,a) - Q(s,a_data) )
-# on top of a standard TD (Bellman) loss.
-#
-# Notes:
-# - Uses Double Q (two critics) + Polyak target networks.
-# - Uses "min(Q1, Q2)" for the bootstrap target (clipped double Q).
-# - Uses Huber loss + grad clipping.
-# - YAML config driven (similar to your IQL script).
+# Key stability features for recommender-style action spaces (|A| large):
+#  1) Double Q + Polyak target nets
+#  2) TD target uses min(Q1_t, Q2_t) and greedy action (DQN-like)
+#  3) CQL(H) conservative penalty with exact logsumexp over actions
+#  4) IMPORTANT: "Centered" CQL penalty subtracting T*log|A|
+#     This removes the constant offset induced purely by catalog size.
+#  5) Penalty computed on Q_min = min(Q1, Q2) to reduce variance
+#  6) Huber TD + grad clipping
 # ------------------------------------------------------------
 
 import argparse
@@ -19,7 +17,7 @@ import json
 import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional
 
 import numpy as np
 import torch
@@ -60,18 +58,43 @@ def make_run_dir(output_root: str, experiment_name: str, cfg: dict) -> Path:
     return run_dir
 
 
-def safe_logsumexp(q_all: torch.Tensor, temperature: float = 1.0) -> torch.Tensor:
+def safe_logsumexp(q_all: torch.Tensor, temperature: float) -> torch.Tensor:
     """
-    Computes: temperature * logsumexp(q_all / temperature)
-    Stable for large action spaces.
-    Input: q_all shape [B, A]
-    Output: shape [B]
+    temperature * logsumexp(q_all / temperature) over actions
+    q_all: [B, A] -> returns [B]
     """
     if temperature <= 0:
-        raise ValueError("temperature must be > 0")
-    x = q_all / temperature
-    # torch.logsumexp is stable
-    return temperature * torch.logsumexp(x, dim=1)
+        raise ValueError("cql_temperature must be > 0")
+    return temperature * torch.logsumexp(q_all / temperature, dim=1)
+
+
+def cql_centered_penalty(
+    q_all: torch.Tensor,
+    a_data: torch.Tensor,
+    temperature: float,
+) -> torch.Tensor:
+    """
+    Centered CQL(H) penalty per sample:
+        (T*logsumexp(Q/T) - T*log|A|) - Q(s,a_data)
+
+    Why centered:
+      For large |A|, T*logsumexp(Q/T) ≈ T*log|A| when Q ~ 0,
+      which adds a huge constant unrelated to OOD-ness.
+      Subtracting T*log|A| removes that constant baseline.
+
+    q_all: [B, A]
+    a_data: [B]
+    returns: [B]
+    """
+    b, num_actions = q_all.shape
+    q_data = q_all.gather(1, a_data.unsqueeze(1)).squeeze(1)  # [B]
+
+    lse = safe_logsumexp(q_all, temperature=temperature)      # [B]
+
+    # baseline = T * log|A| (computed on device, stable)
+    baseline = temperature * torch.log(torch.tensor(float(num_actions), device=q_all.device))
+
+    return (lse - baseline) - q_data
 
 
 # ============================================================
@@ -93,15 +116,8 @@ class Config:
     gamma: float
 
     # CQL
-    alpha_cql: float                 # conservative penalty weight (fixed)
-    cql_temperature: float           # temp for logsumexp; 1.0 typical
-    cql_variant: str                 # "H" (CQL(H)) or "simple" (same in discrete exact LSE)
-    # optional Lagrange (auto alpha) - kept simple/off by default
-    use_lagrange: bool
-    target_action_gap: float         # if use_lagrange, target for (logsumexp - Qdata)
-    lr_alpha: float                  # alpha optimizer LR if use_lagrange
-    alpha_min: float
-    alpha_max: float
+    alpha_cql: float
+    cql_temperature: float
 
     # training
     epochs: int
@@ -120,7 +136,7 @@ class Config:
 
     # stability knobs
     huber_delta: float
-    max_q_abs: Optional[float]       # optional clamp for Q predictions (diagnostic stability)
+    max_q_abs: Optional[float]
 
     # logging
     log_every_epochs: int
@@ -169,28 +185,6 @@ def load_npz(npz_path: str, batch_size: int, reward_scale: float):
 
 
 # ============================================================
-# CQL Loss (discrete exact)
-# ============================================================
-
-def cql_penalty(
-    q_all: torch.Tensor,
-    a_data: torch.Tensor,
-    temperature: float,
-) -> torch.Tensor:
-    """
-    CQL(H) penalty term (per sample):
-      logsumexp_a Q(s,a) - Q(s,a_data)
-    Using exact logsumexp over discrete actions.
-    q_all: [B, A]
-    a_data: [B]
-    returns: [B]
-    """
-    q_data = q_all.gather(1, a_data.unsqueeze(1)).squeeze(1)     # [B]
-    lse = safe_logsumexp(q_all, temperature=temperature)         # [B]
-    return lse - q_data
-
-
-# ============================================================
 # Train
 # ============================================================
 
@@ -207,7 +201,7 @@ def train(cfg: Config):
     Q1 = QNetwork(state_dim, num_actions, cfg.hidden1, cfg.hidden2).to(DEVICE)
     Q2 = QNetwork(state_dim, num_actions, cfg.hidden1, cfg.hidden2).to(DEVICE)
 
-    # targets
+    # target critics
     Q1_t = QNetwork(state_dim, num_actions, cfg.hidden1, cfg.hidden2).to(DEVICE)
     Q2_t = QNetwork(state_dim, num_actions, cfg.hidden1, cfg.hidden2).to(DEVICE)
     Q1_t.load_state_dict(Q1.state_dict())
@@ -222,18 +216,11 @@ def train(cfg: Config):
         eps=1e-8,
     )
 
-    # Optional Lagrange alpha tuning (kept stable by clamping)
-    # In continuous CQL they use Lagrangian to tune alpha. In discrete it's also possible.
-    # Here we tune alpha to match target_action_gap on the penalty mean.
-    if cfg.use_lagrange:
-        log_alpha = torch.tensor(np.log(max(cfg.alpha_cql, 1e-6)), device=DEVICE, requires_grad=True)
-        alpha_opt = optim.Adam([log_alpha], lr=cfg.lr_alpha, eps=1e-8)
-    else:
-        log_alpha = None
-        alpha_opt = None
-
     global_step = 0
     diag = {"epochs": []}
+
+    alpha = float(cfg.alpha_cql)
+    temperature = float(cfg.cql_temperature)
 
     for epoch in range(1, cfg.epochs + 1):
         Q1.train()
@@ -243,13 +230,10 @@ def train(cfg: Config):
         cql_loss_sum = 0.0
         total_loss_sum = 0.0
 
-        stats = {
-            "q_data_mean": [],
-            "q_lse_mean": [],
-            "penalty_mean": [],
-            "target_mean": [],
-            "td_mean": [],
-        }
+        # epoch stats
+        penalty_means = []
+        qdata_means = []
+        lse_means = []
 
         pbar = tqdm(loader, desc=f"[CQL-stable] epoch {epoch}/{cfg.epochs}", leave=False)
         for s, a, r, s_next, done in pbar:
@@ -262,22 +246,20 @@ def train(cfg: Config):
             done = done.to(DEVICE)
 
             # ------------------------------------------------------------
-            # (1) Compute bootstrap target (clipped double Q + greedy)
-            # Standard DQN-like target but using min(Q1,Q2) for stability.
+            # (1) TD target: DQN-like with clipped double Q target critics
             # ------------------------------------------------------------
             with torch.no_grad():
-                q1_next_all = Q1_t(s_next)              # [B,A]
-                q2_next_all = Q2_t(s_next)              # [B,A]
+                q1_next_all = Q1_t(s_next)   # [B,A]
+                q2_next_all = Q2_t(s_next)   # [B,A]
                 q_next_min = torch.minimum(q1_next_all, q2_next_all)
 
-                # greedy action under the MIN critics (stable)
                 a_next = torch.argmax(q_next_min, dim=1)  # [B]
-                q_next = q_next_min.gather(1, a_next.unsqueeze(1)).squeeze(1)
+                q_next = q_next_min.gather(1, a_next.unsqueeze(1)).squeeze(1)  # [B]
 
                 target = r + cfg.gamma * (1.0 - done) * q_next
 
             # ------------------------------------------------------------
-            # (2) TD loss for both critics
+            # (2) Current Q predictions
             # ------------------------------------------------------------
             q1_all = Q1(s)  # [B,A]
             q2_all = Q2(s)  # [B,A]
@@ -289,46 +271,21 @@ def train(cfg: Config):
             q1_sa = q1_all.gather(1, a.unsqueeze(1)).squeeze(1)  # [B]
             q2_sa = q2_all.gather(1, a.unsqueeze(1)).squeeze(1)  # [B]
 
+            # TD loss (Huber) both critics
             td_loss = (
                 F.huber_loss(q1_sa, target, delta=cfg.huber_delta) +
                 F.huber_loss(q2_sa, target, delta=cfg.huber_delta)
             )
 
             # ------------------------------------------------------------
-            # (3) CQL conservative penalty
-            # CQL(H): logsumexp(Q) - Q_data
-            # We apply it to each critic separately and sum.
+            # (3) CQL(H) centered penalty on Q_min (more stable in recsys)
             # ------------------------------------------------------------
-            pen1 = cql_penalty(q1_all, a, temperature=cfg.cql_temperature)  # [B]
-            pen2 = cql_penalty(q2_all, a, temperature=cfg.cql_temperature)  # [B]
-            penalty = 0.5 * (pen1 + pen2)                                  # [B]
-
-            # Alpha handling
-            if cfg.use_lagrange:
-                # alpha = exp(log_alpha), clamped
-                alpha = torch.exp(log_alpha).clamp(cfg.alpha_min, cfg.alpha_max)
-
-                # In CQL Lagrange form: alpha * (penalty - target_gap)
-                # We update alpha to push penalty_mean toward target_action_gap.
-                cql_term = alpha * (penalty.mean() - cfg.target_action_gap)
-
-                # Update alpha (gradient ASCENT on alpha objective usually; implement via minimizing negative)
-                alpha_opt.zero_grad(set_to_none=True)
-                alpha_loss = -(alpha * (penalty.mean() - cfg.target_action_gap)).detach()
-                # Note: detach here to avoid second-order effects; stable in practice.
-                # If you want exact gradients: remove detach and compute alpha loss separately.
-                # But for offline stability, this is often preferred.
-                alpha_loss.backward()
-                alpha_opt.step()
-
-                # For critic loss we still use current alpha
-                alpha = torch.exp(log_alpha).clamp(cfg.alpha_min, cfg.alpha_max).detach()
-            else:
-                alpha = torch.tensor(float(cfg.alpha_cql), device=DEVICE)
-                cql_term = alpha * penalty.mean()
+            q_min_all = torch.minimum(q1_all, q2_all)  # [B,A]
+            penalty_vec = cql_centered_penalty(q_min_all, a, temperature=temperature)  # [B]
+            cql_loss = alpha * penalty_vec.mean()
 
             # Total loss
-            loss = td_loss + cql_term
+            loss = td_loss + cql_loss
 
             q_opt.zero_grad(set_to_none=True)
             loss.backward()
@@ -343,40 +300,35 @@ def train(cfg: Config):
                 polyak_update(Q2_t, Q2, cfg.tau_polyak)
 
             # ------------------------------------------------------------
-            # Stats
+            # stats
             # ------------------------------------------------------------
             td_loss_sum += float(td_loss.item())
-            cql_loss_sum += float(cql_term.item())
+            cql_loss_sum += float(cql_loss.item())
             total_loss_sum += float(loss.item())
 
             with torch.no_grad():
-                q_data_mean = 0.5 * (q1_sa.mean() + q2_sa.mean())
-                q_lse_mean = 0.5 * (safe_logsumexp(q1_all, cfg.cql_temperature).mean() +
-                                    safe_logsumexp(q2_all, cfg.cql_temperature).mean())
-                stats["q_data_mean"].append(q_data_mean.detach().cpu())
-                stats["q_lse_mean"].append(q_lse_mean.detach().cpu())
-                stats["penalty_mean"].append(penalty.mean().detach().cpu())
-                stats["target_mean"].append(target.mean().detach().cpu())
-                stats["td_mean"].append((target - 0.5 * (q1_sa + q2_sa)).mean().detach().cpu())
+                # report uncentered LSE and Qdata for intuition
+                lse_unc = safe_logsumexp(q_min_all, temperature=temperature).mean()
+                qdata = q_min_all.gather(1, a.unsqueeze(1)).squeeze(1).mean()
+                penalty_means.append(penalty_vec.mean().detach().cpu())
+                qdata_means.append(qdata.detach().cpu())
+                lse_means.append(lse_unc.detach().cpu())
 
         # epoch summary
-        q_data_mean = float(torch.stack(stats["q_data_mean"]).mean().item())
-        q_lse_mean = float(torch.stack(stats["q_lse_mean"]).mean().item())
-        penalty_mean = float(torch.stack(stats["penalty_mean"]).mean().item())
-        target_mean = float(torch.stack(stats["target_mean"]).mean().item())
-        td_mean = float(torch.stack(stats["td_mean"]).mean().item())
+        penalty_mean = float(torch.stack(penalty_means).mean().item())
+        qdata_mean = float(torch.stack(qdata_means).mean().item())
+        lse_mean = float(torch.stack(lse_means).mean().item())
 
         row = {
             "epoch": epoch,
             "td_loss": td_loss_sum / len(loader),
             "cql_loss": cql_loss_sum / len(loader),
             "total_loss": total_loss_sum / len(loader),
-            "q_data_mean": q_data_mean,
-            "q_lse_mean": q_lse_mean,
-            "penalty_mean": penalty_mean,
-            "target_mean": target_mean,
-            "td_error_mean": td_mean,
-            "alpha": float(torch.exp(log_alpha).clamp(cfg.alpha_min, cfg.alpha_max).item()) if cfg.use_lagrange else float(cfg.alpha_cql),
+            "penalty_centered_mean": penalty_mean,
+            "qdata_mean": qdata_mean,
+            "lse_uncentered_mean": lse_mean,
+            "alpha": alpha,
+            "temperature": temperature,
         }
         diag["epochs"].append(row)
 
@@ -384,16 +336,17 @@ def train(cfg: Config):
             print(
                 f"[CQL-stable] epoch {epoch:03d} | "
                 f"TD {row['td_loss']:.6f} | CQL {row['cql_loss']:.6f} | "
-                f"Penalty {row['penalty_mean']:.4f} | "
-                f"Qdata {row['q_data_mean']:.3f} | LSE {row['q_lse_mean']:.3f} | "
+                f"Penalty(centered) {row['penalty_centered_mean']:.4f} | "
+                f"Qdata {row['qdata_mean']:.3f} | "
+                f"LSE(unc) {row['lse_uncentered_mean']:.3f} | "
                 f"alpha {row['alpha']:.4f}"
             )
 
-        # Fail-fast on divergence
+        # fail-fast
         if not np.isfinite(row["total_loss"]) or not np.isfinite(row["td_loss"]) or not np.isfinite(row["cql_loss"]):
             raise RuntimeError("Divergence detected (NaN/Inf). Check reward_scale/gamma/lr/alpha and dataset sanity.")
 
-    # Save
+    # save
     torch.save(
         {
             "Q1": Q1.state_dict(),
@@ -419,11 +372,12 @@ def main():
 
     with open(args.config, "r") as f:
         cfg_dict = yaml.safe_load(f)
+
     cfg = Config(**cfg_dict)
 
     set_seed(cfg.seed)
     print("=" * 80)
-    print("CQL DISCRETE STABLE (offline, large action space)")
+    print("CQL DISCRETE STABLE (offline, large action space) - CENTERED PENALTY")
     print("Device:", DEVICE)
     print("Config:", cfg)
     print("=" * 80)
