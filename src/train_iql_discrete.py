@@ -63,6 +63,7 @@ class IQLDiscreteConfig:
     gamma: float
     expectile: float
     tau_polyak: float
+    reward_scale: float
 
     # critic/value training
     critic_epochs: int
@@ -182,13 +183,13 @@ class PolicyNet(nn.Module):
 # Training
 # ============================================================
 
-def make_dataloader_from_npz(npz_path: str, batch_size: int):
+def make_dataloader_from_npz(npz_path: str, batch_size: int,reward_scale:float):
     d = np.load(npz_path)
 
     obs = torch.tensor(d["observations"], dtype=torch.float32)
     next_obs = torch.tensor(d["next_observations"], dtype=torch.float32)
     actions = torch.tensor(d["actions"].reshape(-1), dtype=torch.long)
-    rewards = torch.tensor(d["rewards"], dtype=torch.float32)
+    rewards = torch.tensor(d["rewards"], dtype=torch.float32) * reward_scale
     terminals = torch.tensor(d["terminals"], dtype=torch.float32)
 
     # prefer explicit num_items/num_actions from file if present (matches your current pipeline)
@@ -506,7 +507,7 @@ def main():
     print("Config:", cfg)
     print("=" * 80)
 
-    loader, info = make_dataloader_from_npz(cfg.train_npz, cfg.batch_size)
+    loader, info = make_dataloader_from_npz(cfg.train_npz, cfg.batch_size, cfg.reward_scale)
 
     print("Dataset:")
     print("  N          :", info["N"])

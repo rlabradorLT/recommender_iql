@@ -2,7 +2,7 @@
 # Run
 # ============================================================
 experiment_name: "iql_discrete_faithful"
-output_root: "./runs"
+output_root: "../runs"
 seed: 0
 
 # ============================================================
@@ -10,19 +10,20 @@ seed: 0
 # observations, next_observations, actions, rewards, terminals
 # and optionally num_items (recommended)
 # ============================================================
-train_npz: "./data/train.npz"
+train_npz: "../data/processed/small_matrix_kuairec_20260304_190839/rl_train.npz"
 
 # ============================================================
 # IQL algorithm
 # ============================================================
-gamma: 0.99
-expectile: 0.7
+gamma: 0.95
+expectile: 0.8
 tau_polyak: 0.005
+reward_scale: 0.1
 
 # ============================================================
 # Critic/Value training
 # ============================================================
-critic_epochs: 100
+critic_epochs: 10
 batch_size: 4096
 lr_q: 0.0003
 lr_v: 0.0003
@@ -41,7 +42,7 @@ hidden2: 256
 # weights = exp(beta * (minQ - V))
 # ============================================================
 train_policy: true
-policy_epochs: 50
+policy_epochs: 10
 lr_pi: 0.0003
 beta: 3.0
 max_weight: 100.0
@@ -51,8 +52,8 @@ policy_grad_clip: 10.0
 # Optional stabilizers (set null for faithful-by-default)
 # If you want: clamp_adv_min: -20.0, clamp_adv_max: 20.0
 # ============================================================
-clamp_adv_min: null
-clamp_adv_max: null
+clamp_adv_min: -10
+clamp_adv_max: 10
 
 # ============================================================
 # Logging
