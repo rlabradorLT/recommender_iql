@@ -43,6 +43,8 @@ def main(cfg):
     warmup_length = cfg["simulation"]["warmup_length"]
     horizon = cfg["simulation"]["horizon"]
 
+    num_candidates = cfg["simulation"].get("num_candidates", 100)
+
     print("\nLoading sessions...")
 
     sessions = load_sessions(events_path, split)
@@ -102,6 +104,7 @@ def main(cfg):
             warmup_length=warmup_length,
             horizon=horizon,
             allowed_items=allowed_items,
+            num_candidates=num_candidates,
         )
 
         all_results[name] = results

@@ -45,7 +45,7 @@ simulation:
 
   # número de pasos simulados por usuario
   horizon: 10
-
+  num_candidates: 100
   # semilla para que todos los agentes se comparen bajo la misma
   # aleatoriedad del simulador
   seed: 42

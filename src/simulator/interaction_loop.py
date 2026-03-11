@@ -2,6 +2,20 @@ import numpy as np
 
 from simulator.metrics import EpisodeMetrics, SimulationMetrics
 
+def sample_candidates(action, num_items, num_negatives=99):
+    """
+    Genera candidate set: 1 positivo + N negativos.
+    Usa la misma lógica que build_candidates.py
+    """
+
+    negs = np.random.randint(0, num_items, size=num_negatives)
+
+    mask = (negs == action)
+    while mask.any():
+        negs[mask] = np.random.randint(0, num_items, size=mask.sum())
+        mask = (negs == action)
+
+    return np.concatenate(([action], negs))
 
 def run_episode(
     user_model,
@@ -52,18 +66,26 @@ def run_episode(
         # selección acción (epsilon-greedy sobre top-k)
         # -----------------------------------------------------
 
-        epsilon = 0.05
-        top_k = 20
+        # epsilon = 0.05
+        # top_k = 20
 
-        top_items = np.argsort(scores)[-top_k:]
+        # top_items = np.argsort(scores)[-top_k:]
 
-        if np.random.rand() < epsilon:
-            action = int(np.random.choice(top_items))
-        else:
-            action = int(top_items[np.argmax(scores[top_items])])
+        # if np.random.rand() < epsilon:
+        #     action = int(np.random.choice(top_items))
+        # else:
+        #     action = int(top_items[np.argmax(scores[top_items])])
             
-        accepted, user_prob = user_model.evaluate_recommendation(action)
+        # accepted, user_prob = user_model.evaluate_recommendation(action)
+        action = int(np.argmax(scores))
 
+        # candidate set
+        candidates = sample_candidates(action, len(scores))
+
+        accepted, user_prob = user_model.evaluate_recommendation(
+            action,
+            candidates
+        )
         reward = 1.0 if accepted else 0.0
 
         if accepted:

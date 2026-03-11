@@ -102,31 +102,32 @@ class GRUUserModel:
     # ---------------------------------------------------------
 
     @torch.no_grad()
-    def evaluate_recommendation(self, item_id: int):
+    def evaluate_recommendation(self, item_id, candidates):
         """
-        Aceptación basada en ranking del ítem recomendado.
-        Más realista que Bernoulli(p) sobre todo el catálogo.
+        Evalúa la recomendación dentro de un candidate set.
         """
 
         probs = self.distribution()
 
-        # ranking descendente
-        ranking = torch.argsort(probs, descending=True)
+        # probabilidades solo de los candidatos
+        cand_probs = probs[candidates]
+
+        # ranking dentro del candidate set
+        ranking = torch.argsort(cand_probs, descending=True)
 
         # posición del item recomendado
-        rank = (ranking == item_id).nonzero(as_tuple=True)[0].item()
+        rec_index = (candidates == item_id).nonzero(as_tuple=True)[0].item()
+        rank = (ranking == rec_index).nonzero(as_tuple=True)[0].item()
 
-        # probabilidades por tramo de ranking
-        if rank < 5:
+        # probabilidad de aceptación según ranking
+        if rank < 3:
             accept_p = 0.9
         elif rank < 10:
             accept_p = 0.6
         elif rank < 20:
             accept_p = 0.3
-        elif rank < 50:
-            accept_p = 0.1
         else:
-            accept_p = 0.02
+            accept_p = 0.05
 
         accepted = np.random.rand() < accept_p
 
