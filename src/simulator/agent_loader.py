@@ -203,13 +203,16 @@ class BaseAgent:
 
         return scores
 
-    def recommend(self, state, forbidden_items=None) -> int:
-        scores = self.score(state, forbidden_items=forbidden_items)
+    def recommend(self, state, forbidden_items=None):
 
-        if not np.isfinite(scores).any():
-            raise RuntimeError("All agent scores are non-finite after masking.")
+        scores = self.score(state, forbidden_items)
 
-        return int(np.argmax(scores))
+        temperature = 0.05
+
+        probs = np.exp(scores / temperature)
+        probs = probs / probs.sum()
+
+        return int(np.random.choice(len(scores), p=probs))
 
     def describe(self) -> dict:
         return {
