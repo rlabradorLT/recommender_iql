@@ -1,0 +1,32 @@
+dataset_dir: ../data/processed/big_matrix_kuairec_20260305_185345
+
+split: test
+
+eval_batch: 2048
+
+ks:
+  - 5
+  - 10
+  - 20
+
+hidden1: 512
+hidden2: 512
+
+
+models:
+
+  BC:
+    type: policy
+    ckpt: ../runs/bc_discrete_bigmatrix_839789_20260306_083247/bc_candidate.pt
+
+  IQL_policy:
+    type: policy
+    ckpt: ../runs/iql_discrete_policy_bigmatrix_358270_20260306_134409/iql_policy.pt
+
+  IQL_Q:
+    type: critic
+    ckpt: ../runs/iql_discrete_bigmatrix_252894_20260306_102617/iql_stable.pt
+  
+  CQL:
+    type: critic
+    ckpt: ../runs/cql_discrete_stable_bigmatrix_382234_20260310_192330/cql_discrete_stable.pt

@@ -1,0 +1,19 @@
+experiment_name: "iql_discrete_policy_bigmatrix"
+
+train_npz: ../data/processed/big_matrix_kuairec_20260305_185345/rl_train.npz
+
+iql_checkpoint: ../runs/iql_discrete_bigmatrix_252894_20260306_102617/iql_stable.pt
+
+output_root: ../runs
+
+batch_size: 4096
+policy_epochs: 20
+
+lr_pi: 0.0003
+grad_clip_norm: 5.0
+
+beta: 5.0
+max_weight: 50
+
+hidden1: 512
+hidden2: 512

@@ -1,0 +1,19 @@
+experiment_name: "bc_discrete_bigmatrix"
+
+train_npz: ../data/processed/big_matrix_kuairec_20260305_185345/rl_train.npz
+output_root: ../runs
+
+batch_size: 4096
+epochs: 20
+
+lr: 0.0003
+weight_decay: 0.0
+grad_clip_norm: 5.0
+
+hidden1: 512
+hidden2: 512
+
+num_negatives: 99
+
+# label_smoothing: 0.0
+seed: 0

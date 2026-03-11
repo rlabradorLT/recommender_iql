@@ -26,3 +26,7 @@ models:
   IQL_Q:
     type: critic
     ckpt: ../runs/iql_discrete_faithful_768418_20260305_092236/iql_stable.pt
+  
+  CQL:
+    type: critic
+    ckpt: ../runs/cql_discrete_stable_254785_20260305_150639/cql_discrete_stable.pt
