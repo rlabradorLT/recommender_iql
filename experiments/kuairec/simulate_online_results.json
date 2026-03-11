@@ -1,0 +1,38 @@
+{
+  "bc": {
+    "cumulative_reward": 7.0,
+    "acceptance_rate": 0.0004961020552799433,
+    "avg_user_probability": 0.0003005091044826254,
+    "avg_session_length": 10.0,
+    "item_coverage": 0.07873848334514529,
+    "unique_items_recommended": 1111,
+    "repetition_rate": 0.9212615166548547
+  },
+  "iql_policy": {
+    "cumulative_reward": 7.0,
+    "acceptance_rate": 0.0004961020552799433,
+    "avg_user_probability": 0.0004150168641811849,
+    "avg_session_length": 10.0,
+    "item_coverage": 0.005598866052445074,
+    "unique_items_recommended": 79,
+    "repetition_rate": 0.9944011339475549
+  },
+  "iql_critic": {
+    "cumulative_reward": 6.0,
+    "acceptance_rate": 0.00042523033309709425,
+    "avg_user_probability": 0.00031131366349442224,
+    "avg_session_length": 10.0,
+    "item_coverage": 0.0010630758327427356,
+    "unique_items_recommended": 15,
+    "repetition_rate": 0.9989369241672572
+  },
+  "cql": {
+    "cumulative_reward": 5.0,
+    "acceptance_rate": 0.00035435861091424523,
+    "avg_user_probability": 0.00030583097189941375,
+    "avg_session_length": 10.0,
+    "item_coverage": 0.007512402551381999,
+    "unique_items_recommended": 106,
+    "repetition_rate": 0.992487597448618
+  }
+}

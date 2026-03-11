@@ -15,14 +15,18 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # utilidades
 # ============================================================
 
+def _safe_torch_load(path: str):
+    return torch.load(path, map_location=DEVICE, weights_only=False)
+
+
 def _to_tensor_state(state: np.ndarray) -> torch.Tensor:
-    """
-    Convierte un estado numpy 1D a tensor batch [1, obs_dim].
-    """
     if not isinstance(state, np.ndarray):
         state = np.asarray(state, dtype=np.float32)
 
     state = state.astype(np.float32, copy=False)
+
+    if state.ndim == 2 and state.shape[0] == 1:
+        state = state[0]
 
     if state.ndim != 1:
         raise ValueError(f"Expected 1D state, got shape {state.shape}")
@@ -31,9 +35,6 @@ def _to_tensor_state(state: np.ndarray) -> torch.Tensor:
 
 
 def _mask_forbidden(scores: np.ndarray, forbidden_items=None) -> np.ndarray:
-    """
-    Enmascara items prohibidos asignando -inf.
-    """
     out = scores.copy()
 
     if forbidden_items is None:
@@ -43,11 +44,76 @@ def _mask_forbidden(scores: np.ndarray, forbidden_items=None) -> np.ndarray:
         return out
 
     idx = np.asarray(list(forbidden_items), dtype=np.int64)
-
     idx = idx[(idx >= 0) & (idx < len(out))]
     out[idx] = -np.inf
 
     return out
+
+
+def _get_state_dim(ckpt: dict, stats_path: str) -> int:
+    if "state_dim" in ckpt:
+        return int(ckpt["state_dim"])
+
+    mean, _ = load_normalization_stats(stats_path)
+    return int(mean.shape[-1])
+
+
+def _get_num_actions(ckpt: dict, state_dict: dict) -> int:
+    if "num_actions" in ckpt:
+        return int(ckpt["num_actions"])
+
+    if "num_items" in ckpt:
+        return int(ckpt["num_items"])
+
+    # PolicyNet final layer
+    if "net.4.weight" in state_dict:
+        return int(state_dict["net.4.weight"].shape[0])
+
+    # QNetwork final layer
+    if "fc3.weight" in state_dict:
+        return int(state_dict["fc3.weight"].shape[0])
+
+    raise KeyError("Could not infer num_actions / num_items from checkpoint.")
+
+
+def _infer_policy_hidden_dims(state_dict: dict):
+    # PolicyNet:
+    # net.0 = Linear(state_dim, h1)
+    # net.2 = Linear(h1, h2)
+    # net.4 = Linear(h2, num_actions)
+    h1 = int(state_dict["net.0.weight"].shape[0])
+    h2 = int(state_dict["net.2.weight"].shape[0])
+    return h1, h2
+
+
+def _infer_q_hidden_dims(state_dict: dict):
+    # QNetwork:
+    # fc1 = Linear(state_dim, h1)
+    # fc2 = Linear(h1, h2)
+    # fc3 = Linear(h2, num_actions)
+    h1 = int(state_dict["fc1.weight"].shape[0])
+    h2 = int(state_dict["fc2.weight"].shape[0])
+    return h1, h2
+
+
+def _extract_policy_state_dict(ckpt: dict):
+    if "policy" in ckpt:
+        return ckpt["policy"]
+
+    if "model_state_dict" in ckpt:
+        return ckpt["model_state_dict"]
+
+    raise KeyError("Policy checkpoint does not contain 'policy' or 'model_state_dict'.")
+
+
+def _extract_q_state_dicts(ckpt: dict):
+    if "Q1" in ckpt and "Q2" in ckpt:
+        return ckpt["Q1"], ckpt["Q2"]
+
+    if "q1_state_dict" in ckpt and "q2_state_dict" in ckpt:
+        return ckpt["q1_state_dict"], ckpt["q2_state_dict"]
+
+    raise KeyError("Critic checkpoint does not contain Q1/Q2 weights.")
 
 
 # ============================================================
@@ -55,9 +121,6 @@ def _mask_forbidden(scores: np.ndarray, forbidden_items=None) -> np.ndarray:
 # ============================================================
 
 class BaseAgent:
-    """
-    Interfaz común para todos los agentes del simulador.
-    """
 
     def score(self, state, forbidden_items=None) -> np.ndarray:
         raise NotImplementedError
@@ -75,31 +138,32 @@ class BaseAgent:
 
 
 # ============================================================
-# agentes basados en policy
+# agentes policy
 # ============================================================
 
 class PolicyAgent(BaseAgent):
-    """
-    Wrapper para BC e IQL Policy.
-    """
 
     def __init__(self, checkpoint_path: str, stats_path: str):
 
-        ckpt = torch.load(checkpoint_path, map_location=DEVICE)
+        ckpt = _safe_torch_load(checkpoint_path)
+
+        state_dict = _extract_policy_state_dict(ckpt)
+        state_dim = _get_state_dim(ckpt, stats_path)
+        num_actions = _get_num_actions(ckpt, state_dict)
+        hidden1, hidden2 = _infer_policy_hidden_dims(state_dict)
 
         self.model = PolicyNet(
-            obs_dim=ckpt["obs_dim"],
-            num_items=ckpt["num_items"],
-            hidden1=ckpt["hidden1"],
-            hidden2=ckpt["hidden2"],
+            state_dim,
+            num_actions,
+            hidden1,
+            hidden2,
         ).to(DEVICE)
 
-        self.model.load_state_dict(ckpt["model_state_dict"])
+        self.model.load_state_dict(state_dict)
         self.model.eval()
 
-        self.num_items = ckpt["num_items"]
-        self.obs_dim = ckpt["obs_dim"]
-
+        self.num_actions = num_actions
+        self.state_dim = state_dim
         self.norm_stats = load_normalization_stats(stats_path)
 
     @torch.no_grad()
@@ -110,52 +174,51 @@ class PolicyAgent(BaseAgent):
 
         logits = self.model(state_t).squeeze(0).detach().cpu().numpy()
 
-        if logits.shape[0] != self.num_items:
+        if logits.shape[0] != self.num_actions:
             raise ValueError(
-                f"Expected {self.num_items} item scores, got {logits.shape[0]}"
+                f"Expected {self.num_actions} item scores, got {logits.shape[0]}"
             )
 
-        logits = _mask_forbidden(logits, forbidden_items=forbidden_items)
-
-        return logits
+        return _mask_forbidden(logits, forbidden_items=forbidden_items)
 
 
 # ============================================================
-# agentes basados en critic
+# agentes critic
 # ============================================================
 
 class CriticAgent(BaseAgent):
-    """
-    Wrapper para IQL critic ranking y CQL critic ranking.
-    """
 
     def __init__(self, checkpoint_path: str, stats_path: str):
 
-        ckpt = torch.load(checkpoint_path, map_location=DEVICE)
+        ckpt = _safe_torch_load(checkpoint_path)
+
+        q1_state, q2_state = _extract_q_state_dicts(ckpt)
+        state_dim = _get_state_dim(ckpt, stats_path)
+        num_actions = _get_num_actions(ckpt, q1_state)
+        hidden1, hidden2 = _infer_q_hidden_dims(q1_state)
 
         self.q1 = QNetwork(
-            obs_dim=ckpt["obs_dim"],
-            num_items=ckpt["num_items"],
-            hidden1=ckpt["hidden1"],
-            hidden2=ckpt["hidden2"],
+            state_dim,
+            num_actions,
+            hidden1,
+            hidden2,
         ).to(DEVICE)
 
         self.q2 = QNetwork(
-            obs_dim=ckpt["obs_dim"],
-            num_items=ckpt["num_items"],
-            hidden1=ckpt["hidden1"],
-            hidden2=ckpt["hidden2"],
+            state_dim,
+            num_actions,
+            hidden1,
+            hidden2,
         ).to(DEVICE)
 
-        self.q1.load_state_dict(ckpt["q1_state_dict"])
-        self.q2.load_state_dict(ckpt["q2_state_dict"])
+        self.q1.load_state_dict(q1_state)
+        self.q2.load_state_dict(q2_state)
 
         self.q1.eval()
         self.q2.eval()
 
-        self.num_items = ckpt["num_items"]
-        self.obs_dim = ckpt["obs_dim"]
-
+        self.num_actions = num_actions
+        self.state_dim = state_dim
         self.norm_stats = load_normalization_stats(stats_path)
 
     @torch.no_grad()
@@ -167,16 +230,14 @@ class CriticAgent(BaseAgent):
         q1 = self.q1(state_t)
         q2 = self.q2(state_t)
 
-        q = torch.min(q1, q2).squeeze(0).detach().cpu().numpy()
+        q = torch.minimum(q1, q2).squeeze(0).detach().cpu().numpy()
 
-        if q.shape[0] != self.num_items:
+        if q.shape[0] != self.num_actions:
             raise ValueError(
-                f"Expected {self.num_items} item scores, got {q.shape[0]}"
+                f"Expected {self.num_actions} item scores, got {q.shape[0]}"
             )
 
-        q = _mask_forbidden(q, forbidden_items=forbidden_items)
-
-        return q
+        return _mask_forbidden(q, forbidden_items=forbidden_items)
 
 
 # ============================================================
@@ -184,15 +245,6 @@ class CriticAgent(BaseAgent):
 # ============================================================
 
 def load_agent(agent_type: str, checkpoint_path: str, stats_path: str) -> BaseAgent:
-    """
-    Carga un agente del simulador con interfaz común.
-
-    agent_type:
-        - bc
-        - iql_policy
-        - iql_critic
-        - cql
-    """
 
     agent_type = agent_type.lower().strip()
 

@@ -24,3 +24,27 @@ def normalize_rl_datasets(rl_train, rl_val, rl_test):
     rl_test = normalize_split(rl_test)
 
     return rl_train, rl_val, rl_test, mean, std
+
+# ------------------------------------------------------------
+# cargar estadísticas de normalización
+# ------------------------------------------------------------
+
+def load_normalization_stats(path):
+
+    data = np.load(path)
+
+    mean = data["mean"]
+    std = data["std"]
+
+    return mean, std
+
+
+# ------------------------------------------------------------
+# normalizar una observación individual
+# ------------------------------------------------------------
+
+def normalize_obs(obs, stats):
+
+    mean, std = stats
+
+    return (obs - mean) / (std + 1e-6)

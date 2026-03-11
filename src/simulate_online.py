@@ -12,39 +12,24 @@ from simulator.agent_loader import load_agent
 from simulator.interaction_loop import run_simulation
 
 
-# ============================================================
-# utilidades
-# ============================================================
-
 def set_seed(seed):
-
     np.random.seed(seed)
     torch.manual_seed(seed)
 
 
 def load_sessions(events_path, split="test"):
-    """
-    Carga sesiones desde events_with_split.parquet
-    """
 
     df = pd.read_parquet(events_path)
-
     df = df[df["split"] == split]
 
     sessions = []
 
     for _, g in df.groupby("session_id"):
-
         seq = g.sort_values("timestamp")["item_id"].tolist()
-
         sessions.append(seq)
 
     return sessions
 
-
-# ============================================================
-# main
-# ============================================================
 
 def main(cfg):
 
@@ -63,6 +48,17 @@ def main(cfg):
     sessions = load_sessions(events_path, split)
 
     print(f"Sessions loaded: {len(sessions)}")
+
+    # --------------------------------------------------------
+    # construir catálogo permitido
+    # --------------------------------------------------------
+
+    allowed_items = set()
+
+    for seq in sessions:
+        allowed_items.update(seq)
+
+    print(f"Allowed items in simulator: {len(allowed_items)}")
 
     # --------------------------------------------------------
     # simulador usuario
@@ -91,7 +87,6 @@ def main(cfg):
         print(f"Simulating agent: {name}")
         print("==============================")
 
-        # reset seed para comparabilidad
         set_seed(seed)
 
         agent = load_agent(
@@ -106,16 +101,13 @@ def main(cfg):
             sessions=sessions,
             warmup_length=warmup_length,
             horizon=horizon,
+            allowed_items=allowed_items,
         )
 
         all_results[name] = results
 
         for k, v in results.items():
             print(f"{k:25s}: {v:.4f}")
-
-    # --------------------------------------------------------
-    # guardar resultados
-    # --------------------------------------------------------
 
     output_path = cfg["output"]["results_path"]
 
@@ -126,10 +118,6 @@ def main(cfg):
 
     print("\nResults saved to:", output_path)
 
-
-# ============================================================
-# CLI
-# ============================================================
 
 if __name__ == "__main__":
 

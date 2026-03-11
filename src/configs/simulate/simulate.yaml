@@ -1,16 +1,16 @@
 dataset:
   # Dataset small matrix usado para simular interacción online
-  events_path: data/kuairec_small/events_with_split.parquet
-
+  events_path: ../data/processed/big_small_kuairec_20260311_100231/events_with_split.parquet
+  
   # Estadísticas de normalización del dataset con el que fueron
   # entrenados los agentes offline (normalmente big matrix)
-  normalization_stats: data/kuairec_big/normalization_stats.npz
+  normalization_stats: ../data/processed/big_small_kuairec_20260311_100231/normalization_stats.npz
 
 
 simulator:
   # Checkpoint del GRU entrenado sobre small matrix
   # IMPORTANTE: debe incluir encoder_state_dict y head_state_dict
-  gru_checkpoint: data/kuairec_small/gru_encoder.pt
+  gru_checkpoint: ../data/processed/big_small_kuairec_20260311_100231/gru_encoder.pt
 
   # Temperatura del simulador de usuario:
   # <1.0 = usuario más determinista
@@ -21,19 +21,19 @@ simulator:
 agents:
   - name: bc
     type: bc
-    checkpoint: runs/kuairec/bc/model.pt
+    checkpoint: ../runs/bc_discrete_bigmatrix_839789_20260306_083247/bc_candidate.pt
 
   - name: iql_policy
     type: iql_policy
-    checkpoint: runs/kuairec/iql_policy/model.pt
+    checkpoint: ../runs/iql_discrete_policy_bigmatrix_358270_20260306_134409/iql_policy.pt
 
   - name: iql_critic
     type: iql_critic
-    checkpoint: runs/kuairec/iql_stable/model.pt
+    checkpoint: ../runs/iql_discrete_bigmatrix_252894_20260306_102617/iql_stable.pt
 
   - name: cql
     type: cql
-    checkpoint: runs/kuairec/cql_stable/model.pt
+    checkpoint: ../runs/cql_discrete_stable_bigmatrix_382234_20260310_192330/cql_discrete_stable.pt
 
 
 simulation:
@@ -53,4 +53,4 @@ simulation:
 
 output:
   # archivo JSON final con resultados de todos los agentes
-  results_path: results/kuairec/simulate_online_results.json
+  results_path: ../experiments/kuairec_02/simulate_online_results.json

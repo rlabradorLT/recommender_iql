@@ -1,9 +1,9 @@
-experiment_name: big_matrix_kuairec   # nombre del experimento para organizar outputs
+experiment_name: big_small_kuairec   # nombre del experimento para organizar outputs
 
 seed: 42   # semilla para reproducibilidad en splits y entrenamiento
 
 dataset: kuairec   # tipo de dataset utilizado
-raw_path: ../data/raw/kuairec/KuaiRec 2.0/data/big_matrix.csv   # ruta al dataset raw
+raw_path: ../data/raw/kuairec/KuaiRec 2.0/data/small_matrix.csv   # ruta al dataset raw
 
 output_root: ../data/processed   # directorio donde se guardará el dataset procesado
 
@@ -37,7 +37,7 @@ hid_dim: 128       # dimensión oculta del modelo GRU que genera el estado
 batch_size: 512
 epochs: 5          # número de epochs para entrenar el encoder secuencial
 lr: 0.001          # learning rate del modelo secuencial
-
+save_head: true  # si true, se guarda el head de next-item prediction junto con el encoder
 # El encoder solo aprende representaciones de usuario a partir de secuencias
 
 
