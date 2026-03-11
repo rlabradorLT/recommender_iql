@@ -1,209 +1,162 @@
 import numpy as np
 
 
-# ============================================================
+# ---------------------------------------------------------
+# utilidades
+# ---------------------------------------------------------
+
+def intra_episode_repetition(items):
+    """
+    Mide repetición dentro de una secuencia.
+
+    0.0 = todos los items distintos
+    1.0 = todos iguales
+    """
+    if len(items) <= 1:
+        return 0.0
+
+    unique = len(set(items))
+    return 1.0 - unique / len(items)
+
+
+# ---------------------------------------------------------
 # métricas por episodio
-# ============================================================
+# ---------------------------------------------------------
 
 class EpisodeMetrics:
-    """
-    Métricas de un solo episodio (usuario).
-    """
 
     def __init__(self):
 
-        self.steps = 0
-        self.accepts = 0
-        self.reward = 0.0
-
-        self.user_probs = []
-
         self.recommended_items = []
-        self.accepted_items = []
+        self.accepted = []
+        self.rewards = []
+        self.user_probs = []
+        self.accept_probs = []
 
-    # ---------------------------------------------------------
-    # registrar paso
-    # ---------------------------------------------------------
+        self.catalog_size = None
 
     def log_step(
         self,
         recommended_item,
         accepted,
         reward,
-        user_prob
+        user_prob,
+        accept_probability,
+        catalog_size,
     ):
 
-        self.steps += 1
-        self.reward += reward
+        self.recommended_items.append(int(recommended_item))
+        self.accepted.append(bool(accepted))
+        self.rewards.append(float(reward))
+        self.user_probs.append(float(user_prob))
+        self.accept_probs.append(float(accept_probability))
 
-        self.recommended_items.append(recommended_item)
-        self.user_probs.append(user_prob)
-
-        if accepted:
-            self.accepts += 1
-            self.accepted_items.append(recommended_item)
-
-    # ---------------------------------------------------------
-    # resultados episodio
-    # ---------------------------------------------------------
+        if self.catalog_size is None:
+            self.catalog_size = int(catalog_size)
 
     def compute(self):
 
-        results = {}
+        if len(self.recommended_items) == 0:
+            return None
 
-        if self.steps == 0:
-            return results
+        recommended_items = self.recommended_items
 
-        results["reward"] = float(self.reward)
-
-        results["acceptance_rate"] = float(
-            self.accepts / self.steps
-        )
-
-        results["avg_user_probability"] = float(
-            np.mean(self.user_probs)
-        )
-
-        results["episode_length"] = self.steps
-
-        results["unique_items"] = len(set(self.recommended_items))
-
-        results["repetition_rate"] = repetition_rate(
-            self.recommended_items
-        )
-
-        return results
+        return {
+            "reward": float(np.sum(self.rewards)),
+            "acceptance_rate": float(np.mean(self.accepted)),
+            "avg_user_probability": float(np.mean(self.user_probs)),
+            "avg_accept_probability": float(np.mean(self.accept_probs)),
+            "session_length": int(len(self.recommended_items)),
+            "unique_items": int(len(set(recommended_items))),
+            "intra_episode_repetition": intra_episode_repetition(
+                recommended_items
+            ),
+            "catalog_size": int(self.catalog_size),
+        }
 
 
-# ============================================================
-# métricas globales
-# ============================================================
+# ---------------------------------------------------------
+# métricas de simulación
+# ---------------------------------------------------------
 
 class SimulationMetrics:
-    """
-    Agrega métricas de todos los episodios.
-    """
 
     def __init__(self):
 
-        self.total_steps = 0
-        self.total_reward = 0.0
-        self.total_accepts = 0
+        self.episodes = []
 
-        self.user_probs = []
+        self.all_recommended_items = []
+        self.all_rewards = []
+        self.all_accepts = []
+        self.all_user_probs = []
+        self.all_accept_probs = []
 
-        self.recommended_items = []
-
-        self.session_lengths = []
-
-    # ---------------------------------------------------------
-    # añadir episodio
-    # ---------------------------------------------------------
+        self.catalog_size = None
 
     def add_episode(self, episode: EpisodeMetrics):
 
-        res = episode.compute()
+        result = episode.compute()
 
-        if not res:
+        if result is None:
             return
 
-        self.total_steps += episode.steps
-        self.total_reward += episode.reward
-        self.total_accepts += episode.accepts
+        self.episodes.append(result)
 
-        self.user_probs.extend(episode.user_probs)
-        self.recommended_items.extend(episode.recommended_items)
+        self.all_recommended_items.extend(episode.recommended_items)
+        self.all_rewards.extend(episode.rewards)
+        self.all_accepts.extend(episode.accepted)
+        self.all_user_probs.extend(episode.user_probs)
+        self.all_accept_probs.extend(episode.accept_probs)
 
-        self.session_lengths.append(episode.steps)
-
-    # ---------------------------------------------------------
-    # métricas finales
-    # ---------------------------------------------------------
+        if self.catalog_size is None:
+            self.catalog_size = result["catalog_size"]
 
     def compute(self):
 
-        results = {}
+        if len(self.all_recommended_items) == 0:
+            return {}
 
-        if self.total_steps == 0:
-            return results
+        unique_items = len(set(self.all_recommended_items))
+        catalog_size = self.catalog_size
 
-        # ---------------------------------------------
-        # reward acumulada
-        # ---------------------------------------------
+        if catalog_size is None or catalog_size == 0:
+            catalog_coverage = 0.0
+        else:
+            catalog_coverage = unique_items / catalog_size
 
-        results["cumulative_reward"] = float(self.total_reward)
+        episode_lengths = [
+            ep["session_length"]
+            for ep in self.episodes
+        ]
 
-        # ---------------------------------------------
-        # acceptance rate
-        # ---------------------------------------------
+        intra_repetitions = [
+            ep["intra_episode_repetition"]
+            for ep in self.episodes
+        ]
 
-        results["acceptance_rate"] = float(
-            self.total_accepts / self.total_steps
-        )
+        return {
 
-        # ---------------------------------------------
-        # probabilidad media usuario
-        # ---------------------------------------------
+            "cumulative_reward":
+                float(np.sum(self.all_rewards)),
 
-        if self.user_probs:
+            "acceptance_rate":
+                float(np.mean(self.all_accepts)),
 
-            results["avg_user_probability"] = float(
-                np.mean(self.user_probs)
-            )
+            "avg_user_probability":
+                float(np.mean(self.all_user_probs)),
 
-        # ---------------------------------------------
-        # longitud media sesión
-        # ---------------------------------------------
+            "avg_accept_probability":
+                float(np.mean(self.all_accept_probs)),
 
-        if self.session_lengths:
+            "avg_session_length":
+                float(np.mean(episode_lengths)),
 
-            results["avg_session_length"] = float(
-                np.mean(self.session_lengths)
-            )
+            "catalog_coverage":
+                float(catalog_coverage),
 
-        # ---------------------------------------------
-        # cobertura catálogo
-        # ---------------------------------------------
+            "unique_items_recommended":
+                int(unique_items),
 
-        if self.recommended_items:
-
-            unique_items = len(set(self.recommended_items))
-            total = len(self.recommended_items)
-
-            results["item_coverage"] = float(unique_items / total)
-
-            results["unique_items_recommended"] = unique_items
-
-        # ---------------------------------------------
-        # repetición
-        # ---------------------------------------------
-
-        if self.recommended_items:
-
-            results["repetition_rate"] = repetition_rate(
-                self.recommended_items
-            )
-
-        return results
-
-
-# ============================================================
-# utilidades
-# ============================================================
-
-def repetition_rate(items):
-    """
-    Proporción de recomendaciones repetidas.
-    """
-
-    seen = set()
-    repeats = 0
-
-    for item in items:
-
-        if item in seen:
-            repeats += 1
-
-        seen.add(item)
-
-    return repeats / max(len(items), 1)
+            "avg_intra_episode_repetition":
+                float(np.mean(intra_repetitions)),
+        }

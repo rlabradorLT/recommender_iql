@@ -35,7 +35,7 @@ def _to_tensor_state(state: np.ndarray) -> torch.Tensor:
 
 
 def _mask_forbidden(scores: np.ndarray, forbidden_items=None) -> np.ndarray:
-    out = scores.copy()
+    out = np.asarray(scores, dtype=np.float32).copy()
 
     if forbidden_items is None:
         return out
@@ -48,6 +48,64 @@ def _mask_forbidden(scores: np.ndarray, forbidden_items=None) -> np.ndarray:
     out[idx] = -np.inf
 
     return out
+
+
+def _finite_values(scores: np.ndarray) -> np.ndarray:
+    finite = scores[np.isfinite(scores)]
+
+    if finite.size == 0:
+        raise RuntimeError("All scores are non-finite.")
+
+    return finite
+
+
+def _transform_scores(scores: np.ndarray, transform: str) -> np.ndarray:
+    """
+    Transformación monotónica por estado.
+
+    Objetivo:
+    - hacer explícito el pipeline de decisión;
+    - permitir auditoría/control;
+    - sin alterar el orden relativo útil cuando no corresponde.
+
+    NOTA:
+    'rank' y 'zscore' se aplican solo sobre valores finitos.
+    """
+    scores = np.asarray(scores, dtype=np.float32).copy()
+    transform = str(transform).lower().strip()
+
+    finite_mask = np.isfinite(scores)
+
+    if not finite_mask.any():
+        raise RuntimeError("All scores are non-finite before transform.")
+
+    finite_vals = scores[finite_mask]
+
+    if transform == "none":
+        return scores
+
+    if transform == "zscore":
+        mean = float(finite_vals.mean())
+        std = float(finite_vals.std())
+
+        if std < 1e-12:
+            scores[finite_mask] = 0.0
+        else:
+            scores[finite_mask] = (finite_vals - mean) / std
+
+        return scores
+
+    if transform == "rank":
+        order = np.argsort(finite_vals)
+        ranks = np.empty_like(order, dtype=np.float32)
+        ranks[order] = np.arange(len(finite_vals), dtype=np.float32)
+        scores[finite_mask] = ranks
+        return scores
+
+    raise ValueError(
+        f"Unknown score_transform={transform!r}. "
+        "Use 'none', 'zscore', or 'rank'."
+    )
 
 
 def _get_state_dim(ckpt: dict, stats_path: str) -> int:
@@ -122,19 +180,44 @@ def _extract_q_state_dicts(ckpt: dict):
 
 class BaseAgent:
 
-    def score(self, state, forbidden_items=None) -> np.ndarray:
+    def __init__(self, score_transform: str = "none"):
+        self.score_transform = score_transform
+        self.score_type = "unknown"
+
+    def raw_score(self, state) -> np.ndarray:
         raise NotImplementedError
 
-    def recommend(self, state, forbidden_items=None) -> int:
-        scores = self.score(state, forbidden_items=forbidden_items)
+    def score(self, state, forbidden_items=None) -> np.ndarray:
+        scores = self.raw_score(state)
 
         if scores.ndim != 1:
             raise ValueError(f"Scores must be 1D, got shape {scores.shape}")
+
+        if scores.shape[0] != self.num_actions:
+            raise ValueError(
+                f"Expected {self.num_actions} scores, got {scores.shape[0]}"
+            )
+
+        scores = _mask_forbidden(scores, forbidden_items=forbidden_items)
+        scores = _transform_scores(scores, transform=self.score_transform)
+
+        return scores
+
+    def recommend(self, state, forbidden_items=None) -> int:
+        scores = self.score(state, forbidden_items=forbidden_items)
 
         if not np.isfinite(scores).any():
             raise RuntimeError("All agent scores are non-finite after masking.")
 
         return int(np.argmax(scores))
+
+    def describe(self) -> dict:
+        return {
+            "score_type": self.score_type,
+            "score_transform": self.score_transform,
+            "num_actions": int(self.num_actions),
+            "state_dim": int(self.state_dim),
+        }
 
 
 # ============================================================
@@ -143,7 +226,13 @@ class BaseAgent:
 
 class PolicyAgent(BaseAgent):
 
-    def __init__(self, checkpoint_path: str, stats_path: str):
+    def __init__(
+        self,
+        checkpoint_path: str,
+        stats_path: str,
+        score_transform: str = "none",
+    ):
+        super().__init__(score_transform=score_transform)
 
         ckpt = _safe_torch_load(checkpoint_path)
 
@@ -165,21 +254,15 @@ class PolicyAgent(BaseAgent):
         self.num_actions = num_actions
         self.state_dim = state_dim
         self.norm_stats = load_normalization_stats(stats_path)
+        self.score_type = "policy_logit"
 
     @torch.no_grad()
-    def score(self, state, forbidden_items=None) -> np.ndarray:
-
+    def raw_score(self, state) -> np.ndarray:
         state = normalize_obs(state, self.norm_stats)
         state_t = _to_tensor_state(state)
 
         logits = self.model(state_t).squeeze(0).detach().cpu().numpy()
-
-        if logits.shape[0] != self.num_actions:
-            raise ValueError(
-                f"Expected {self.num_actions} item scores, got {logits.shape[0]}"
-            )
-
-        return _mask_forbidden(logits, forbidden_items=forbidden_items)
+        return np.asarray(logits, dtype=np.float32)
 
 
 # ============================================================
@@ -188,7 +271,13 @@ class PolicyAgent(BaseAgent):
 
 class CriticAgent(BaseAgent):
 
-    def __init__(self, checkpoint_path: str, stats_path: str):
+    def __init__(
+        self,
+        checkpoint_path: str,
+        stats_path: str,
+        score_transform: str = "none",
+    ):
+        super().__init__(score_transform=score_transform)
 
         ckpt = _safe_torch_load(checkpoint_path)
 
@@ -220,10 +309,10 @@ class CriticAgent(BaseAgent):
         self.num_actions = num_actions
         self.state_dim = state_dim
         self.norm_stats = load_normalization_stats(stats_path)
+        self.score_type = "critic_qmin"
 
     @torch.no_grad()
-    def score(self, state, forbidden_items=None) -> np.ndarray:
-
+    def raw_score(self, state) -> np.ndarray:
         state = normalize_obs(state, self.norm_stats)
         state_t = _to_tensor_state(state)
 
@@ -231,27 +320,34 @@ class CriticAgent(BaseAgent):
         q2 = self.q2(state_t)
 
         q = torch.minimum(q1, q2).squeeze(0).detach().cpu().numpy()
-
-        if q.shape[0] != self.num_actions:
-            raise ValueError(
-                f"Expected {self.num_actions} item scores, got {q.shape[0]}"
-            )
-
-        return _mask_forbidden(q, forbidden_items=forbidden_items)
+        return np.asarray(q, dtype=np.float32)
 
 
 # ============================================================
 # factory
 # ============================================================
 
-def load_agent(agent_type: str, checkpoint_path: str, stats_path: str) -> BaseAgent:
+def load_agent(
+    agent_type: str,
+    checkpoint_path: str,
+    stats_path: str,
+    score_transform: str = "none",
+) -> BaseAgent:
 
     agent_type = agent_type.lower().strip()
 
     if agent_type in {"bc", "iql_policy"}:
-        return PolicyAgent(checkpoint_path=checkpoint_path, stats_path=stats_path)
+        return PolicyAgent(
+            checkpoint_path=checkpoint_path,
+            stats_path=stats_path,
+            score_transform=score_transform,
+        )
 
     if agent_type in {"iql_critic", "cql"}:
-        return CriticAgent(checkpoint_path=checkpoint_path, stats_path=stats_path)
+        return CriticAgent(
+            checkpoint_path=checkpoint_path,
+            stats_path=stats_path,
+            score_transform=score_transform,
+        )
 
     raise ValueError(f"Unknown agent type: {agent_type}")

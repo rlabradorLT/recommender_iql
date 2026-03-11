@@ -1,140 +1,200 @@
-import argparse
-import json
-from pathlib import Path
-
-import numpy as np
-import pandas as pd
 import yaml
+import random
+import numpy as np
 import torch
+import pandas as pd
 
-from simulator.user_model import GRUUserModel
 from simulator.agent_loader import load_agent
+from simulator.user_model import GRUUserModel
 from simulator.interaction_loop import run_simulation
 
 
-def set_seed(seed):
+# ---------------------------------------------------------
+# utilidades
+# ---------------------------------------------------------
+
+def set_global_seed(seed: int):
+    random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
 
 
-def load_sessions(events_path, split="test"):
+def load_sessions(parquet_path: str):
+    df = pd.read_parquet(parquet_path)
 
-    df = pd.read_parquet(events_path)
-    df = df[df["split"] == split]
+    if "item_sequence" not in df.columns:
+        raise ValueError("Dataset must contain column 'item_sequence'")
 
-    sessions = []
-
-    for _, g in df.groupby("session_id"):
-        seq = g.sort_values("timestamp")["item_id"].tolist()
-        sessions.append(seq)
-
+    sessions = df["item_sequence"].tolist()
     return sessions
 
 
-def main(cfg):
+def compute_allowed_items(sessions):
 
-    seed = cfg["simulation"]["seed"]
-    set_seed(seed)
-
-    events_path = cfg["dataset"]["events_path"]
-    norm_stats = cfg["dataset"]["normalization_stats"]
-
-    split = cfg["simulation"]["split"]
-    warmup_length = cfg["simulation"]["warmup_length"]
-    horizon = cfg["simulation"]["horizon"]
-
-    num_candidates = cfg["simulation"].get("num_candidates", 100)
-
-    print("\nLoading sessions...")
-
-    sessions = load_sessions(events_path, split)
-
-    print(f"Sessions loaded: {len(sessions)}")
-
-    # --------------------------------------------------------
-    # construir catálogo permitido
-    # --------------------------------------------------------
-
-    allowed_items = set()
+    items = set()
 
     for seq in sessions:
-        allowed_items.update(seq)
+        for item in seq:
+            items.add(int(item))
 
-    print(f"Allowed items in simulator: {len(allowed_items)}")
+    return items
 
-    # --------------------------------------------------------
-    # simulador usuario
-    # --------------------------------------------------------
 
-    print("\nLoading GRU user simulator...")
+def aggregate_results(results):
 
-    user_model = GRUUserModel(
-        checkpoint_path=cfg["simulator"]["gru_checkpoint"],
-        temperature=cfg["simulator"]["temperature"],
-    )
+    keys = results[0].keys()
+    out = {}
 
-    # --------------------------------------------------------
-    # ejecutar simulaciones
-    # --------------------------------------------------------
+    for k in keys:
 
-    all_results = {}
+        vals = [r[k] for r in results]
 
-    for agent_cfg in cfg["agents"]:
+        mean = float(np.mean(vals))
+        std = float(np.std(vals))
+        ci95 = 1.96 * std / np.sqrt(len(vals))
 
-        name = agent_cfg["name"]
-        agent_type = agent_cfg["type"]
-        checkpoint = agent_cfg["checkpoint"]
+        out[k] = {
+            "mean": mean,
+            "std": std,
+            "ci95": float(ci95),
+        }
 
-        print("\n==============================")
-        print(f"Simulating agent: {name}")
-        print("==============================")
+    return out
 
-        set_seed(seed)
+
+# ---------------------------------------------------------
+# experimento
+# ---------------------------------------------------------
+
+def run_agent_experiment(config, agent_name, agent_cfg, sessions, allowed_items):
+
+    seeds = config["simulation"]["seeds"]
+
+    results = []
+
+    for seed in seeds:
+
+        set_global_seed(seed)
 
         agent = load_agent(
-            agent_type=agent_type,
-            checkpoint_path=checkpoint,
-            stats_path=norm_stats,
+            agent_type=agent_cfg["type"],
+            checkpoint_path=agent_cfg["checkpoint"],
+            stats_path=agent_cfg["normalization_stats"],
+            score_transform=config["simulation"]["score_transform"],
         )
 
-        results = run_simulation(
+        user_model = GRUUserModel(
+            checkpoint_path=config["user_model"]["checkpoint"],
+            temperature=config["user_model"]["temperature"],
+            acceptance_scale=config["user_model"]["acceptance_scale"],
+            acceptance_min=config["user_model"]["acceptance_min"],
+            acceptance_max=config["user_model"]["acceptance_max"],
+        )
+
+        result = run_simulation(
             user_model=user_model,
             agent=agent,
             sessions=sessions,
-            warmup_length=warmup_length,
-            horizon=horizon,
             allowed_items=allowed_items,
-            num_candidates=num_candidates,
+            warmup_length=config["simulation"]["warmup_length"],
+            horizon=config["simulation"]["horizon"],
+            forbid_repeated=config["simulation"]["forbid_repeated"],
+            acceptance_mode=config["simulation"]["acceptance_mode"],
+            num_candidates=config["simulation"]["num_candidates"],
         )
 
-        all_results[name] = results
+        results.append(result)
 
-        for k, v in results.items():
-            print(f"{k:25s}: {v:.4f}")
+    return aggregate_results(results)
 
-    output_path = cfg["output"]["results_path"]
 
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+# ---------------------------------------------------------
+# validaciones
+# ---------------------------------------------------------
 
-    with open(output_path, "w") as f:
-        json.dump(all_results, f, indent=2)
+def validate_environment(agent, user_model, allowed_items):
 
-    print("\nResults saved to:", output_path)
+    if agent.num_actions != user_model.num_items:
+        raise RuntimeError(
+            f"Agent action space ({agent.num_actions}) "
+            f"!= user model items ({user_model.num_items})"
+        )
+
+    max_allowed = max(allowed_items)
+
+    if max_allowed >= agent.num_actions:
+        raise RuntimeError(
+            f"allowed_items contains id {max_allowed} "
+            f"outside agent action space ({agent.num_actions})"
+        )
+
+
+# ---------------------------------------------------------
+# main
+# ---------------------------------------------------------
+
+def main():
+
+    with open("simulate.yaml") as f:
+        config = yaml.safe_load(f)
+
+    sessions = load_sessions(config["dataset"]["sessions_path"])
+    allowed_items = compute_allowed_items(sessions)
+
+    print("===================================")
+    print("ONLINE SIMULATION")
+    print("===================================")
+
+    print(f"Sessions: {len(sessions)}")
+    print(f"Catalog size: {len(allowed_items)}")
+    print()
+
+    results = {}
+
+    for agent_name, agent_cfg in config["agents"].items():
+
+        print(f"Running agent: {agent_name}")
+
+        agent = load_agent(
+            agent_type=agent_cfg["type"],
+            checkpoint_path=agent_cfg["checkpoint"],
+            stats_path=agent_cfg["normalization_stats"],
+        )
+
+        user_model = GRUUserModel(
+            checkpoint_path=config["user_model"]["checkpoint"]
+        )
+
+        validate_environment(agent, user_model, allowed_items)
+
+        agent_result = run_agent_experiment(
+            config,
+            agent_name,
+            agent_cfg,
+            sessions,
+            allowed_items,
+        )
+
+        results[agent_name] = agent_result
+
+    print()
+    print("===================================")
+    print("RESULTS")
+    print("===================================")
+
+    for agent, metrics in results.items():
+
+        print()
+        print(agent)
+
+        for k, v in metrics.items():
+
+            print(
+                f"{k:30s} "
+                f"{v['mean']:.4f} ± {v['ci95']:.4f} "
+                f"(std={v['std']:.4f})"
+            )
 
 
 if __name__ == "__main__":
-
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument(
-        "--config",
-        type=str,
-        required=True,
-    )
-
-    args = parser.parse_args()
-
-    with open(args.config) as f:
-        cfg = yaml.safe_load(f)
-
-    main(cfg)
+    main()
