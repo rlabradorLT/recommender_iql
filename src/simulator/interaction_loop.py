@@ -24,6 +24,7 @@ def run_episode(
     allowed_items,
     horizon=10,
     forbid_repeated=True,
+    num_candidates=100,
 ):
 
     episode = EpisodeMetrics()
@@ -79,13 +80,17 @@ def run_episode(
         # accepted, user_prob = user_model.evaluate_recommendation(action)
         action = int(np.argmax(scores))
 
-        # candidate set
-        candidates = sample_candidates(action, len(scores))
+        candidates = sample_candidates(
+            action,
+            len(scores),
+            num_negatives=num_candidates - 1
+        )
 
         accepted, user_prob = user_model.evaluate_recommendation(
             action,
             candidates
         )
+        
         reward = 1.0 if accepted else 0.0
 
         if accepted:
@@ -116,6 +121,7 @@ def run_simulation(
     allowed_items,
     warmup_length=5,
     horizon=10,
+    num_candidates=100,
 ):
 
     sim_metrics = SimulationMetrics()
@@ -133,6 +139,7 @@ def run_simulation(
             warmup_items=warmup,
             allowed_items=allowed_items,
             horizon=horizon,
+            num_candidates=num_candidates,
         )
 
         sim_metrics.add_episode(episode)
