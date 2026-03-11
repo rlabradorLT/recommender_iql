@@ -2,20 +2,31 @@ import numpy as np
 
 from simulator.metrics import EpisodeMetrics, SimulationMetrics
 
-def sample_candidates(action, num_items, num_negatives=99):
+def sample_candidates(action, allowed_items, num_negatives=99):
     """
-    Genera candidate set: 1 positivo + N negativos.
-    Usa la misma lógica que build_candidates.py
+    Genera candidate set usando solo items válidos para el simulador.
     """
 
-    negs = np.random.randint(0, num_items, size=num_negatives)
+    allowed_items = np.array(list(allowed_items))
+
+    negs = np.random.choice(
+        allowed_items,
+        size=num_negatives,
+        replace=True
+    )
 
     mask = (negs == action)
+
     while mask.any():
-        negs[mask] = np.random.randint(0, num_items, size=mask.sum())
+        negs[mask] = np.random.choice(
+            allowed_items,
+            size=mask.sum(),
+            replace=True
+        )
         mask = (negs == action)
 
     return np.concatenate(([action], negs))
+
 
 def run_episode(
     user_model,
@@ -82,7 +93,7 @@ def run_episode(
 
         candidates = sample_candidates(
             action,
-            len(scores),
+            allowed_items,
             num_negatives=num_candidates - 1
         )
 

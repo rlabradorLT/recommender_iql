@@ -103,23 +103,17 @@ class GRUUserModel:
 
     @torch.no_grad()
     def evaluate_recommendation(self, item_id, candidates):
-        """
-        Evalúa la recomendación dentro de un candidate set.
-        """
 
         probs = self.distribution()
 
-        # probabilidades solo de los candidatos
         cand_probs = probs[candidates]
 
-        # ranking dentro del candidate set
         ranking = torch.argsort(cand_probs, descending=True)
 
-        # posición del item recomendado
-        rec_index = (candidates == item_id).nonzero(as_tuple=True)[0].item()
-        rank = (ranking == rec_index).nonzero(as_tuple=True)[0].item()
+        rec_index = np.where(candidates == item_id)[0][0]
 
-        # probabilidad de aceptación según ranking
+        rank = torch.where(ranking == rec_index)[0].item()
+
         if rank < 3:
             accept_p = 0.9
         elif rank < 10:
