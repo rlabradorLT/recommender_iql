@@ -1,0 +1,56 @@
+dataset:
+  # Dataset small matrix usado para simular interacción online
+  events_path: data/kuairec_small/events_with_split.parquet
+
+  # Estadísticas de normalización del dataset con el que fueron
+  # entrenados los agentes offline (normalmente big matrix)
+  normalization_stats: data/kuairec_big/normalization_stats.npz
+
+
+simulator:
+  # Checkpoint del GRU entrenado sobre small matrix
+  # IMPORTANTE: debe incluir encoder_state_dict y head_state_dict
+  gru_checkpoint: data/kuairec_small/gru_encoder.pt
+
+  # Temperatura del simulador de usuario:
+  # <1.0 = usuario más determinista
+  # >1.0 = usuario más estocástico
+  temperature: 1.0
+
+
+agents:
+  - name: bc
+    type: bc
+    checkpoint: runs/kuairec/bc/model.pt
+
+  - name: iql_policy
+    type: iql_policy
+    checkpoint: runs/kuairec/iql_policy/model.pt
+
+  - name: iql_critic
+    type: iql_critic
+    checkpoint: runs/kuairec/iql_stable/model.pt
+
+  - name: cql
+    type: cql
+    checkpoint: runs/kuairec/cql_stable/model.pt
+
+
+simulation:
+  # split del small matrix sobre el que se simula
+  split: test
+
+  # número de items reales usados para inicializar el estado del usuario
+  warmup_length: 5
+
+  # número de pasos simulados por usuario
+  horizon: 10
+
+  # semilla para que todos los agentes se comparen bajo la misma
+  # aleatoriedad del simulador
+  seed: 42
+
+
+output:
+  # archivo JSON final con resultados de todos los agentes
+  results_path: results/kuairec/simulate_online_results.json

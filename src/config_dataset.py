@@ -22,6 +22,7 @@ class DatasetConfig:
     batch_size: int
     epochs: int
     lr: float
+    save_head: bool
 
     reward_type: str
     val_ratio: float

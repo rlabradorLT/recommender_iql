@@ -8,7 +8,7 @@ from .gru_dataset import NextItemDataset
 from .gru_model import GRUEncoder, NextItemHead
 
 
-def train_gru(events, num_items, cfg, device, output_dir):
+def train_gru(events, num_items, cfg, device, output_dir, save_head=False):
 
     train_df = events[events["split"] == "train"]
 
@@ -76,13 +76,25 @@ def train_gru(events, num_items, cfg, device, output_dir):
 
         print(f"Epoch {ep+1} loss {total/n:.4f}")
 
+    # ---------------------------------------------------------
+    # guardar checkpoint
+    # ---------------------------------------------------------
+
+    ckpt = {
+        "encoder_state_dict": encoder.state_dict(),
+        "emb_dim": cfg.emb_dim,
+        "hid_dim": cfg.hid_dim,
+        "num_items": num_items,
+        "pad_item_id": cfg.pad_item_id
+    }
+
+    # opcional: guardar la head
+    if getattr(cfg, "save_head", False):
+
+        ckpt["head_state_dict"] = head.state_dict()
+
     torch.save(
-        {
-            "encoder_state_dict": encoder.state_dict(),
-            "emb_dim": cfg.emb_dim,
-            "hid_dim": cfg.hid_dim,
-            "num_items": num_items
-        },
+        ckpt,
         output_dir / "gru_encoder.pt"
     )
 
