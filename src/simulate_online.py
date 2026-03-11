@@ -3,6 +3,9 @@ import random
 import numpy as np
 import torch
 import pandas as pd
+import argparse
+import json
+from pathlib import Path
 
 from simulator.agent_loader import load_agent
 from simulator.user_model import GRUUserModel
@@ -19,13 +22,34 @@ def set_global_seed(seed: int):
     torch.manual_seed(seed)
 
 
-def load_sessions(parquet_path: str):
-    df = pd.read_parquet(parquet_path)
+def load_sessions(events_path: str, split: str):
+    df = pd.read_parquet(events_path)
 
-    if "item_sequence" not in df.columns:
-        raise ValueError("Dataset must contain column 'item_sequence'")
+    required_cols = {"session_id", "item_id", "split"}
+    missing = required_cols - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"Dataset is missing required columns: {sorted(missing)}"
+        )
 
-    sessions = df["item_sequence"].tolist()
+    df = df[df["split"] == split].copy()
+
+    if len(df) == 0:
+        raise ValueError(f"No events found for split={split!r}")
+
+    order_cols = [c for c in ["event_idx", "timestamp", "ts"] if c in df.columns]
+
+    if order_cols:
+        df = df.sort_values(["session_id"] + order_cols)
+    else:
+        df = df.sort_values(["session_id"])
+
+    sessions = (
+        df.groupby("session_id")["item_id"]
+        .apply(lambda x: [int(v) for v in x.tolist()])
+        .tolist()
+    )
+
     return sessions
 
 
@@ -68,7 +92,14 @@ def aggregate_results(results):
 
 def run_agent_experiment(config, agent_name, agent_cfg, sessions, allowed_items):
 
-    seeds = config["simulation"]["seeds"]
+    sim_cfg = config["simulation"]
+
+    if "seeds" in sim_cfg:
+        seeds = sim_cfg["seeds"]
+    elif "seed" in sim_cfg:
+        seeds = [sim_cfg["seed"]]
+    else:
+        seeds = [42]
 
     results = []
 
@@ -79,16 +110,12 @@ def run_agent_experiment(config, agent_name, agent_cfg, sessions, allowed_items)
         agent = load_agent(
             agent_type=agent_cfg["type"],
             checkpoint_path=agent_cfg["checkpoint"],
-            stats_path=agent_cfg["normalization_stats"],
-            score_transform=config["simulation"]["score_transform"],
+            stats_path=config["dataset"]["normalization_stats"],
         )
 
         user_model = GRUUserModel(
-            checkpoint_path=config["user_model"]["checkpoint"],
-            temperature=config["user_model"]["temperature"],
-            acceptance_scale=config["user_model"]["acceptance_scale"],
-            acceptance_min=config["user_model"]["acceptance_min"],
-            acceptance_max=config["user_model"]["acceptance_max"],
+            checkpoint_path=config["simulator"]["gru_checkpoint"],
+            temperature=config["simulator"]["temperature"],
         )
 
         result = run_simulation(
@@ -102,9 +129,8 @@ def run_agent_experiment(config, agent_name, agent_cfg, sessions, allowed_items)
             acceptance_mode=config["simulation"]["acceptance_mode"],
             num_candidates=config["simulation"]["num_candidates"],
         )
-
         results.append(result)
-
+    
     return aggregate_results(results)
 
 
@@ -114,31 +140,40 @@ def run_agent_experiment(config, agent_name, agent_cfg, sessions, allowed_items)
 
 def validate_environment(agent, user_model, allowed_items):
 
-    if agent.num_actions != user_model.num_items:
+    if user_model.num_items > agent.num_actions:
         raise RuntimeError(
-            f"Agent action space ({agent.num_actions}) "
-            f"!= user model items ({user_model.num_items})"
+            f"user model items ({user_model.num_items}) "
+            f"> agent action space ({agent.num_actions})"
         )
 
     max_allowed = max(allowed_items)
 
-    if max_allowed >= agent.num_actions:
+    if max_allowed >= user_model.num_items:
         raise RuntimeError(
             f"allowed_items contains id {max_allowed} "
-            f"outside agent action space ({agent.num_actions})"
+            f"outside user model space ({user_model.num_items})"
         )
-
 
 # ---------------------------------------------------------
 # main
 # ---------------------------------------------------------
 
 def main():
+    parser = argparse.ArgumentParser()
 
-    with open("simulate.yaml") as f:
+    parser.add_argument(
+        "--config",
+        required=True
+    )
+
+    args = parser.parse_args()
+    with open(args.config) as f:
         config = yaml.safe_load(f)
 
-    sessions = load_sessions(config["dataset"]["sessions_path"])
+    sessions = load_sessions(
+        events_path=config["dataset"]["events_path"],
+        split=config["simulation"]["split"],
+    )
     allowed_items = compute_allowed_items(sessions)
 
     print("===================================")
@@ -151,18 +186,21 @@ def main():
 
     results = {}
 
-    for agent_name, agent_cfg in config["agents"].items():
+    for agent_cfg in config["agents"]:
+
+        agent_name = agent_cfg["name"]
 
         print(f"Running agent: {agent_name}")
 
         agent = load_agent(
             agent_type=agent_cfg["type"],
             checkpoint_path=agent_cfg["checkpoint"],
-            stats_path=agent_cfg["normalization_stats"],
+            stats_path=config["dataset"]["normalization_stats"],
         )
 
         user_model = GRUUserModel(
-            checkpoint_path=config["user_model"]["checkpoint"]
+            checkpoint_path=config["simulator"]["gru_checkpoint"],
+            temperature=config["simulator"]["temperature"],
         )
 
         validate_environment(agent, user_model, allowed_items)
@@ -194,6 +232,17 @@ def main():
                 f"{v['mean']:.4f} ± {v['ci95']:.4f} "
                 f"(std={v['std']:.4f})"
             )
+
+    # -------- guardar JSON --------
+
+    output_path = Path(config["output"]["results_path"])
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(output_path, "w") as f:
+        json.dump(results, f, indent=2)
+
+    print()
+    print(f"Results saved to: {output_path}")
 
 
 if __name__ == "__main__":

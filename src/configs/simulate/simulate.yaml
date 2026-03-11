@@ -51,7 +51,7 @@ simulation:
   seed: 42
   forbid_repeated: true
 
-  acceptance_mode: direct # candidate_set | direct
+  acceptance_mode: candidate_set # candidate_set | direct
 
 output:
   # archivo JSON final con resultados de todos los agentes

@@ -31,7 +31,7 @@ class GRUUserModel:
         acceptance_max: float = 0.99,
     ):
 
-        ckpt = torch.load(checkpoint_path, map_location=DEVICE)
+        ckpt = torch.load(checkpoint_path, map_location=DEVICE, weights_only=True)
 
         self.encoder = GRUEncoder(
             num_items=ckpt["num_items"],
